@@ -12,7 +12,7 @@ pub fn run_apt_action_pkexec(action: &str, pkg_name: &str) -> Result<Child, std:
 pub fn run_apt_install_sudo(packages: &[&str]) -> Result<Child, std::io::Error> {
     let mut args = vec!["apt-get", "install", "-y"];
     args.extend(packages);
-    Command::new("sudo")
+    Command::new("pkexec")
         .args(&args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
