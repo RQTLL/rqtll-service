@@ -2,23 +2,44 @@ use std::collections::HashSet;
 use tokio::process::Command;
 
 pub async fn get_ros_distro() -> String {
-    let output = Command::new("/bin/bash")
-        .arg("-c")
-        .arg("source /opt/ros/jazzy/setup.bash && echo $ROS_DISTRO")
-        .output()
-        .await;
-
-    match output {
-        Ok(out) => {
-            let distro = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            if distro.is_empty() {
-                "Ninguna".into()
-            } else {
-                distro
+    if let Ok(entries) = std::fs::read_dir("/opt/ros") {
+        let mut found_distros = Vec::new();
+        for entry in entries.flatten() {
+            if let Ok(file_type) = entry.file_type() {
+                if file_type.is_dir() {
+                    if let Some(name) = entry.file_name().to_str() {
+                        let setup_path = entry.path().join("setup.bash");
+                        if setup_path.exists() {
+                            found_distros.push(name.to_string());
+                        }
+                    }
+                }
             }
         }
-        Err(_) => "No detectada".into(),
+        
+        if !found_distros.is_empty() {
+            found_distros.sort();
+            // Try to source the first found distro to confirm it works
+            let distro = &found_distros[0];
+            let output = Command::new("/bin/bash")
+                .arg("-c")
+                .arg(format!("source /opt/ros/{}/setup.bash && echo $ROS_DISTRO", distro))
+                .output()
+                .await;
+
+            match output {
+                Ok(out) => {
+                    let d = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                    if !d.is_empty() {
+                        return d;
+                    }
+                }
+                Err(_) => {}
+            }
+            return distro.clone();
+        }
     }
+    "Ninguna".into()
 }
 
 pub async fn get_all_installed_matching_prefixes() -> HashSet<String> {
