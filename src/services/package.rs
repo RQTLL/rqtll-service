@@ -32,11 +32,29 @@ impl PackageService for MyPackageService {
         &self,
         req: Request<ListPackagesRequest>,
     ) -> Result<Response<Self::ListAvailablePackagesStream>, Status> {
-        let user_filter = req.into_inner().filter;
+        let req = req.into_inner();
+        let user_filter = req.filter;
+        
+        let mut prefixes = Vec::new();
+        if req.show_ros {
+            prefixes.push("ros");
+        }
+        if req.show_python {
+            prefixes.push("python3");
+        }
+        if req.show_rti {
+            prefixes.push("rti");
+        }
+        
+        if prefixes.is_empty() {
+            prefixes.extend(&["ros", "rti", "python3"]);
+        }
+        
+        let prefix_regex = prefixes.join("|");
         let regex_filter = if user_filter.is_empty() {
-            r"^(ros|rti|python3)-".to_string()
+            format!(r"^({})-", prefix_regex)
         } else {
-            format!(r"^(ros|rti|python3)-.*{}", user_filter)
+            format!(r"^({})-.*{}", prefix_regex, user_filter)
         };
 
         let (tx, rx) = mpsc::channel(128);
