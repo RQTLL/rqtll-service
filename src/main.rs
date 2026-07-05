@@ -7,11 +7,13 @@ mod utils;
 use services::clone::MyCloneWorkspaceService;
 use services::installer::MyROSInstallerService;
 use services::package::MyPackageService;
+use services::workspace::MyWorkspaceService;
 use utils::apt::get_ros_distro;
 
 use rqt2_api::rqt2::api::v1::clone_workspace_service_server::CloneWorkspaceServiceServer;
 use rqt2_api::rqt2::api::v1::package_service_server::PackageServiceServer;
 use rqt2_api::rqt2::api::v1::ros_installer_service_server::RosInstallerServiceServer;
+use rqt2_api::rqt2::api::v1::workspace_service_server::WorkspaceServiceServer;
 use rqt2_api::rqt2::api::v1::FILE_DESCRIPTOR_SET;
 
 #[tokio::main]
@@ -25,6 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pkg_svc = PackageServiceServer::new(MyPackageService::default());
     let clone_svc = CloneWorkspaceServiceServer::new(MyCloneWorkspaceService::default());
     let installer_svc = RosInstallerServiceServer::new(MyROSInstallerService::default());
+    let workspace_svc = WorkspaceServiceServer::new(MyWorkspaceService::default());
 
     println!(">_ RQT2-API Backend");
     println!("   {}@ROS2 {}", addr, get_ros_distro().await);
@@ -34,6 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add_service(pkg_svc)
         .add_service(clone_svc)
         .add_service(installer_svc)
+        .add_service(workspace_svc)
         .serve(addr)
         .await?;
 
