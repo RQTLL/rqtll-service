@@ -2,8 +2,8 @@ use std::path::PathBuf;
 use tokio::process::Command;
 use tonic::{Request, Response, Status};
 
-use rqt2_api::rqt2::api::v1::workspace_service_server::WorkspaceService;
-use rqt2_api::rqt2::api::v1::{
+use rqtll_api::rqtll::api::v1::workspace_service_server::WorkspaceService;
+use rqtll_api::rqtll::api::v1::{
     CreateNodesAndLaunchersRequest, CreatePackageRequest, CreateWorkspaceRequest,
     ListWorkspacePackagesRequest, ListWorkspacePackagesResponse, OpenWorkspaceRequest,
     OpenWorkspaceResponse,
@@ -14,9 +14,9 @@ use crate::utils::fs::expand_home_dir;
 
 fn find_templates_dir() -> Option<PathBuf> {
     let candidates = [
-        PathBuf::from("../rqt2-components/templates"),
-        PathBuf::from("rqt2-components/templates"),
-        PathBuf::from("/home/akey/Proyectos/rqt2/rqt2-components/templates"),
+        PathBuf::from("../rqtll-components/templates"),
+        PathBuf::from("rqtll-components/templates"),
+        PathBuf::from("/home/akey/Proyectos/rqtll/rqtll-components/templates"),
     ];
     for c in &candidates {
         if c.exists() && c.is_dir() {
@@ -50,7 +50,7 @@ impl WorkspaceService for MyWorkspaceService {
     ) -> Result<Response<OpenWorkspaceResponse>, Status> {
         Ok(Response::new(OpenWorkspaceResponse {
             packages: vec![],
-            status: Some(rqt2_api::rqt2::api::v1::Status {
+            status: Some(rqtll_api::rqtll::api::v1::Status {
                 ok: true,
                 code: 0,
                 message: "Stub implementation".to_string(),
@@ -65,7 +65,7 @@ impl WorkspaceService for MyWorkspaceService {
     ) -> Result<Response<ListWorkspacePackagesResponse>, Status> {
         Ok(Response::new(ListWorkspacePackagesResponse {
             packages: vec![],
-            status: Some(rqt2_api::rqt2::api::v1::Status {
+            status: Some(rqtll_api::rqtll::api::v1::Status {
                 ok: true,
                 code: 0,
                 message: "Stub implementation".to_string(),
@@ -77,20 +77,20 @@ impl WorkspaceService for MyWorkspaceService {
     async fn create_workspace(
         &self,
         req: Request<CreateWorkspaceRequest>,
-    ) -> Result<Response<rqt2_api::rqt2::api::v1::Status>, Status> {
+    ) -> Result<Response<rqtll_api::rqtll::api::v1::Status>, Status> {
         let req = req.into_inner();
         let expanded = expand_home_dir(&req.path);
         let path = PathBuf::from(expanded);
         let src_path = path.join("src");
 
         match std::fs::create_dir_all(&src_path) {
-            Ok(_) => Ok(Response::new(rqt2_api::rqt2::api::v1::Status {
+            Ok(_) => Ok(Response::new(rqtll_api::rqtll::api::v1::Status {
                 ok: true,
                 code: 0,
                 message: format!("Workspace and src directory created successfully at {:?}", src_path),
                 details: std::collections::HashMap::new(),
             })),
-            Err(e) => Ok(Response::new(rqt2_api::rqt2::api::v1::Status {
+            Err(e) => Ok(Response::new(rqtll_api::rqtll::api::v1::Status {
                 ok: false,
                 code: 13, // INTERNAL
                 message: format!("Error creating workspace src directory: {}", e),
@@ -102,7 +102,7 @@ impl WorkspaceService for MyWorkspaceService {
     async fn create_package(
         &self,
         req: Request<CreatePackageRequest>,
-    ) -> Result<Response<rqt2_api::rqt2::api::v1::Status>, Status> {
+    ) -> Result<Response<rqtll_api::rqtll::api::v1::Status>, Status> {
         let req = req.into_inner();
 
         let mut args = vec![
@@ -231,14 +231,14 @@ impl WorkspaceService for MyWorkspaceService {
                         }
                     }
 
-                    Ok(Response::new(rqt2_api::rqt2::api::v1::Status {
+                    Ok(Response::new(rqtll_api::rqtll::api::v1::Status {
                         ok: true,
                         code: 0,
                         message: format!("Package created successfully. stdout: {}", stdout),
                         details: std::collections::HashMap::new(),
                     }))
                 } else {
-                    Ok(Response::new(rqt2_api::rqt2::api::v1::Status {
+                    Ok(Response::new(rqtll_api::rqtll::api::v1::Status {
                         ok: false,
                         code: 13, // INTERNAL
                         message: format!("ros2 pkg create failed:\nstdout: {}\nstderr: {}", stdout, stderr),
@@ -247,7 +247,7 @@ impl WorkspaceService for MyWorkspaceService {
                 }
             }
             Err(e) => {
-                Ok(Response::new(rqt2_api::rqt2::api::v1::Status {
+                Ok(Response::new(rqtll_api::rqtll::api::v1::Status {
                     ok: false,
                     code: 13, // INTERNAL
                     message: format!("Failed to execute command: {}", e),
@@ -259,12 +259,12 @@ impl WorkspaceService for MyWorkspaceService {
     async fn create_nodes_and_launchers(
         &self,
         req: Request<CreateNodesAndLaunchersRequest>,
-    ) -> Result<Response<rqt2_api::rqt2::api::v1::Status>, Status> {
+    ) -> Result<Response<rqtll_api::rqtll::api::v1::Status>, Status> {
         let req = req.into_inner();
         let templates_dir = match find_templates_dir() {
             Some(d) => d,
             None => {
-                return Ok(Response::new(rqt2_api::rqt2::api::v1::Status {
+                return Ok(Response::new(rqtll_api::rqtll::api::v1::Status {
                     ok: false,
                     code: 5, // NOT_FOUND
                     message: "Templates directory not found".to_string(),
@@ -278,7 +278,7 @@ impl WorkspaceService for MyWorkspaceService {
             .join(&req.package_name);
 
         if !pkg_dir.exists() {
-            return Ok(Response::new(rqt2_api::rqt2::api::v1::Status {
+            return Ok(Response::new(rqtll_api::rqtll::api::v1::Status {
                 ok: false,
                 code: 5, // NOT_FOUND
                 message: format!("Package directory {:?} does not exist", pkg_dir),
@@ -312,7 +312,7 @@ impl WorkspaceService for MyWorkspaceService {
             let template_content = match std::fs::read_to_string(&template_path) {
                 Ok(content) => content,
                 Err(e) => {
-                    return Ok(Response::new(rqt2_api::rqt2::api::v1::Status {
+                    return Ok(Response::new(rqtll_api::rqtll::api::v1::Status {
                         ok: false,
                         code: 13,
                         message: format!("Failed to read template {:?}: {}", template_path, e),
@@ -351,7 +351,7 @@ impl WorkspaceService for MyWorkspaceService {
             };
 
             if let Err(e) = std::fs::write(&dest_file_path, content) {
-                return Ok(Response::new(rqt2_api::rqt2::api::v1::Status {
+                return Ok(Response::new(rqtll_api::rqtll::api::v1::Status {
                     ok: false,
                     code: 13,
                     message: format!("Failed to write node to {:?}: {}", dest_file_path, e),
@@ -364,7 +364,7 @@ impl WorkspaceService for MyWorkspaceService {
         if !req.launchers.is_empty() {
             let launch_dir = pkg_dir.join("launch");
             if let Err(e) = std::fs::create_dir_all(&launch_dir) {
-                return Ok(Response::new(rqt2_api::rqt2::api::v1::Status {
+                return Ok(Response::new(rqtll_api::rqtll::api::v1::Status {
                     ok: false,
                     code: 13,
                     message: format!("Failed to create launch directory {:?}: {}", launch_dir, e),
@@ -391,7 +391,7 @@ impl WorkspaceService for MyWorkspaceService {
                 let template_content = match std::fs::read_to_string(&template_path) {
                     Ok(content) => content,
                     Err(e) => {
-                        return Ok(Response::new(rqt2_api::rqt2::api::v1::Status {
+                        return Ok(Response::new(rqtll_api::rqtll::api::v1::Status {
                             ok: false,
                             code: 13,
                             message: format!("Failed to read template {:?}: {}", template_path, e),
@@ -406,7 +406,7 @@ impl WorkspaceService for MyWorkspaceService {
 
                 let dest_file_path = launch_dir.join(launcher);
                 if let Err(e) = std::fs::write(&dest_file_path, content) {
-                    return Ok(Response::new(rqt2_api::rqt2::api::v1::Status {
+                    return Ok(Response::new(rqtll_api::rqtll::api::v1::Status {
                         ok: false,
                         code: 13,
                         message: format!("Failed to write launcher to {:?}: {}", dest_file_path, e),
@@ -449,7 +449,7 @@ impl WorkspaceService for MyWorkspaceService {
                 }
 
                 if let Err(e) = std::fs::write(&setup_py_path, setup_content) {
-                    return Ok(Response::new(rqt2_api::rqt2::api::v1::Status {
+                    return Ok(Response::new(rqtll_api::rqtll::api::v1::Status {
                         ok: false,
                         code: 13,
                         message: format!("Failed to write setup.py: {}", e),
@@ -503,7 +503,7 @@ impl WorkspaceService for MyWorkspaceService {
                 if cmake_content.contains("ament_package()") {
                     cmake_content = cmake_content.replace("ament_package()", &format!("{}ament_package()", cmake_block));
                     if let Err(e) = std::fs::write(&cmake_path, cmake_content) {
-                        return Ok(Response::new(rqt2_api::rqt2::api::v1::Status {
+                        return Ok(Response::new(rqtll_api::rqtll::api::v1::Status {
                             ok: false,
                             code: 13,
                             message: format!("Failed to write CMakeLists.txt: {}", e),
@@ -514,7 +514,7 @@ impl WorkspaceService for MyWorkspaceService {
             }
         }
 
-        Ok(Response::new(rqt2_api::rqt2::api::v1::Status {
+        Ok(Response::new(rqtll_api::rqtll::api::v1::Status {
             ok: true,
             code: 0,
             message: "Nodes and launchers created successfully".to_string(),

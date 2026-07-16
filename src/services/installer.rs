@@ -6,8 +6,8 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 
-use rqt2_api::rqt2::api::v1::ros_installer_service_server::RosInstallerService;
-use rqt2_api::rqt2::api::v1::{EnvInstallProgress, EnvInstallRequest, StepStatus, ConfigureEnvRequest};
+use rqtll_api::rqtll::api::v1::ros_installer_service_server::RosInstallerService;
+use rqtll_api::rqtll::api::v1::{EnvInstallProgress, EnvInstallRequest, StepStatus, ConfigureEnvRequest};
 
 use crate::utils::admin::run_apt_install_sudo;
 
@@ -427,7 +427,7 @@ async fn run_configure_environment_workflow(
 
         let export_line = format!("export ROS_DOMAIN_ID={}", req.domain_id);
         let alias_line = format!(
-            "alias rqt2-ports=\"echo 'ROS_DOMAIN_ID actual: {}'; echo 'Puertos UFW autorizados para ROS 2 (RTPS):'; echo '  - Multicast Descubrimiento: {}/udp'; echo '  - Multicast Datos: {}/udp'; echo '  - Unicast Descubrimiento: {}/udp'; echo '  - Unicast Datos: {}/udp'\"",
+            "alias rqtll-ports=\"echo 'ROS_DOMAIN_ID actual: {}'; echo 'Puertos UFW autorizados para ROS 2 (RTPS):'; echo '  - Multicast Descubrimiento: {}/udp'; echo '  - Multicast Datos: {}/udp'; echo '  - Unicast Descubrimiento: {}/udp'; echo '  - Unicast Datos: {}/udp'\"",
             req.domain_id, multicast_port, data_multicast_port, unicast_port, data_unicast_port
         );
 
@@ -438,7 +438,7 @@ async fn run_configure_environment_workflow(
             if line.starts_with("export ROS_DOMAIN_ID=") {
                 *line = export_line.clone();
                 updated_export = true;
-            } else if line.starts_with("alias rqt2-ports=") {
+            } else if line.starts_with("alias rqtll-ports=") {
                 *line = alias_line.clone();
                 updated_alias = true;
             }

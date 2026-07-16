@@ -8,8 +8,8 @@ use tokio::sync::Mutex;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 
-use rqt2_api::rqt2::api::v1::clone_workspace_service_server::CloneWorkspaceService;
-use rqt2_api::rqt2::api::v1::{
+use rqtll_api::rqtll::api::v1::clone_workspace_service_server::CloneWorkspaceService;
+use rqtll_api::rqtll::api::v1::{
     CloneWorkspaceProgress, CloneWorkspaceRequest, SetCurrentTargetDirRequest,
     SetCurrentTargetDirResponse,
 };

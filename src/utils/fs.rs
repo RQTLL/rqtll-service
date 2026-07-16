@@ -21,6 +21,6 @@ pub fn workspace_state_file() -> PathBuf {
     PathBuf::from(home)
         .join(".local")
         .join("share")
-        .join("rqt2")
+        .join("rqtll")
         .join("target_dir.txt")
 }

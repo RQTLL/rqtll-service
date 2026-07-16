@@ -5,8 +5,8 @@ use tokio::sync::Mutex;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 
-use rqt2_api::rqt2::api::v1::package_service_server::PackageService;
-use rqt2_api::rqt2::api::v1::{InstallProgress, InstallRequest, ListPackagesRequest, PackageInfo};
+use rqtll_api::rqtll::api::v1::package_service_server::PackageService;
+use rqtll_api::rqtll::api::v1::{InstallProgress, InstallRequest, ListPackagesRequest, PackageInfo};
 
 use crate::utils::admin::run_apt_action_pkexec;
 use crate::utils::apt::{check_if_installed, get_all_installed_matching_prefixes, get_ros_distro};

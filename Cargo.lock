@@ -898,7 +898,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
 
 [[package]]
-name = "rqt2_api"
+name = "rqtll_api"
 version = "1.0.0"
 dependencies = [
  "prost",
@@ -909,7 +909,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rqt2_rcl_utils"
+name = "rqtll_rcl_utils"
 version = "0.1.0"
 dependencies = [
  "bytes",
@@ -917,7 +917,7 @@ dependencies = [
  "portable-pty",
  "prost",
  "prost-types",
- "rqt2_api",
+ "rqtll_api",
  "sys-info",
  "tokio",
  "tokio-stream",
