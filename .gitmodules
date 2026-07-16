@@ -1,3 +1,6 @@
 [submodule "external/rqt2-api"]
 	path = external/rqt2-api
 	url = https://github.com/RQT2/rqt2-api.git
+[submodule "external/rqtll-api"]
+	path = external/rqtll-api
+	url = https://github.com/RQTLL/rqtll-api.git
