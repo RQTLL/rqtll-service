@@ -427,7 +427,7 @@ async fn run_configure_environment_workflow(
 
         let export_line = format!("export ROS_DOMAIN_ID={}", req.domain_id);
         let alias_line = format!(
-            "alias rqtll-ports=\"echo 'ROS_DOMAIN_ID actual: {}'; echo 'Puertos UFW autorizados para ROS 2 (RTPS):'; echo '  - Multicast Descubrimiento: {}/udp'; echo '  - Multicast Datos: {}/udp'; echo '  - Unicast Descubrimiento: {}/udp'; echo '  - Unicast Datos: {}/udp'\"",
+            "alias ros-ports=\"echo 'ROS_DOMAIN_ID actual: {}'; echo 'Puertos UFW autorizados para ROS 2 (RTPS):'; echo '  - Multicast Descubrimiento: {}/udp'; echo '  - Multicast Datos: {}/udp'; echo '  - Unicast Descubrimiento: {}/udp'; echo '  - Unicast Datos: {}/udp'\"",
             req.domain_id, multicast_port, data_multicast_port, unicast_port, data_unicast_port
         );
 
