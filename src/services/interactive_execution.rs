@@ -57,6 +57,20 @@ fn send_system_notification(title: &str, message: &str) {
         .spawn();
 }
 
+fn extract_ws_path(session_id: &str) -> Option<&str> {
+    if let Some(idx) = session_id.find("_ssh_") {
+        Some(&session_id[..idx])
+    } else if let Some(idx) = session_id.find("_gz_sim_") {
+        Some(&session_id[..idx])
+    } else if let Some(idx) = session_id.find("_rviz2_") {
+        Some(&session_id[..idx])
+    } else if let Some(idx) = session_id.find("_rqt_") {
+        Some(&session_id[..idx])
+    } else {
+        None
+    }
+}
+
 #[tonic::async_trait]
 impl CommandExecutionService for MyCommandExecutionService {
     type StartSessionStream = ReceiverStream<Result<ExecutionOutput, Status>>;
@@ -234,6 +248,11 @@ impl CommandExecutionService for MyCommandExecutionService {
                     args.push("ssh".to_string());
                 }
 
+                args.push("-o".to_string());
+                args.push("PermitLocalCommand=no".to_string());
+                args.push("-o".to_string());
+                args.push("ClearAllForwardings=yes".to_string());
+
                 args.push("-t".to_string());
                 args.push("-t".to_string()); // forces PTY allocation
 
@@ -259,6 +278,7 @@ impl CommandExecutionService for MyCommandExecutionService {
                     args.push("-6".to_string());
                 }
                 
+                args.push("--".to_string());
                 args.push(ssh.server);
 
                 let bin = if use_password { "sshpass".to_string() } else { "ssh".to_string() };
@@ -279,6 +299,11 @@ impl CommandExecutionService for MyCommandExecutionService {
 
             let mut cmd = CommandBuilder::new(&cmd_bin);
             cmd.args(&cmd_args);
+            if let Some(ws_path) = extract_ws_path(&session_id) {
+                if std::path::Path::new(ws_path).is_dir() {
+                    cmd.cwd(std::path::PathBuf::from(ws_path));
+                }
+            }
             
             let child = pair.slave.spawn_command(cmd)
                 .map_err(|e| {
@@ -376,12 +401,17 @@ impl CommandExecutionService for MyCommandExecutionService {
         }
 
         // Spawn child process (standard command)
-        let child = match Command::new(&cmd_bin)
-            .args(&cmd_args)
+        let mut command = Command::new(&cmd_bin);
+        command.args(&cmd_args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn() 
+            .stderr(Stdio::piped());
+        if let Some(ws_path) = extract_ws_path(&session_id) {
+            if std::path::Path::new(ws_path).is_dir() {
+                command.current_dir(ws_path);
+            }
+        }
+        let child = match command.spawn() 
         {
             Ok(c) => c,
             Err(e) => {
@@ -528,11 +558,12 @@ impl CommandExecutionService for MyCommandExecutionService {
                     for c in incoming_str.chars() {
                         if c == '\r' || c == '\n' {
                             let cmd = buf_lock.trim().to_lowercase();
-                            let is_forbidden = cmd.starts_with("sudo")
-                                || cmd.starts_with("su")
-                                || cmd.contains("chmod")
-                                || cmd.contains("chown")
-                                || cmd.contains("passwd");
+                            let is_forbidden = cmd.contains(";")
+                                || cmd.contains("&")
+                                || cmd.contains("&&")
+                                || cmd.contains("||")
+                                || cmd.contains("|")
+                                || cmd.contains("`");
 
                             if is_forbidden {
                                 buf_lock.clear();
@@ -555,7 +586,7 @@ impl CommandExecutionService for MyCommandExecutionService {
                                     _ => {}
                                 }
                                 return Err(Status::permission_denied(
-                                    "Comando bloqueado por motivos de seguridad: no se permite elevar privilegios."
+                                    "Comando bloqueado por motivos de seguridad."
                                 ));
                             }
                             buf_lock.clear();
