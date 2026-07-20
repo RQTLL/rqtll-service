@@ -126,8 +126,16 @@ impl CommandExecutionService for MyCommandExecutionService {
             rqtll_api::rqtll::api::v1::execution_request::Payload::Rqt(rqt) => {
                 let mut args = Vec::new();
                 if !rqt.perspective.is_empty() {
-                    args.push("--perspective".to_string());
-                    args.push(rqt.perspective);
+                    if rqt.perspective.starts_with("standalone:") {
+                        let plugin = &rqt.perspective["standalone:".len()..];
+                        if !plugin.is_empty() {
+                            args.push("-s".to_string());
+                            args.push(plugin.to_string());
+                        }
+                    } else {
+                        args.push("--perspective".to_string());
+                        args.push(rqt.perspective);
+                    }
                 }
                 if !rqt.perspective_file.is_empty() {
                     args.push("--perspective-file".to_string());
@@ -135,8 +143,6 @@ impl CommandExecutionService for MyCommandExecutionService {
                 }
                 if rqt.ht {
                     args.push("-ht".to_string());
-                }
-                if rqt.fl {
                     args.push("-fl".to_string());
                 }
                 ("rqt".to_string(), args, "rqt".to_string())
