@@ -9,6 +9,7 @@ use services::installer::MyROSInstallerService;
 use services::package::MyPackageService;
 use services::workspace::MyWorkspaceService;
 use services::interactive_execution::MyCommandExecutionService;
+use services::data_stream::MyDataStreamService;
 use utils::apt::get_ros_distro;
 
 use rqtll_api::rqtll::api::v1::clone_workspace_service_server::CloneWorkspaceServiceServer;
@@ -16,6 +17,7 @@ use rqtll_api::rqtll::api::v1::package_service_server::PackageServiceServer;
 use rqtll_api::rqtll::api::v1::ros_installer_service_server::RosInstallerServiceServer;
 use rqtll_api::rqtll::api::v1::workspace_service_server::WorkspaceServiceServer;
 use rqtll_api::rqtll::api::v1::command_execution_service_server::CommandExecutionServiceServer;
+use rqtll_api::rqtll::api::v1::data_stream_service_server::DataStreamServiceServer;
 use rqtll_api::rqtll::api::v1::FILE_DESCRIPTOR_SET;
 
 #[tokio::main]
@@ -31,6 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let installer_svc = RosInstallerServiceServer::new(MyROSInstallerService::default());
     let workspace_svc = WorkspaceServiceServer::new(MyWorkspaceService::default());
     let execution_svc = CommandExecutionServiceServer::new(MyCommandExecutionService::default());
+    let data_stream_svc = DataStreamServiceServer::new(MyDataStreamService::default());
 
     println!(">_ RQTLL-API Backend");
     println!("   {}@ROS2 {}", addr, get_ros_distro().await);
@@ -42,6 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add_service(installer_svc)
         .add_service(workspace_svc)
         .add_service(execution_svc)
+        .add_service(data_stream_svc)
         .serve(addr)
         .await?;
 

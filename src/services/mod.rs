@@ -3,3 +3,4 @@ pub mod clone;
 pub mod installer;
 pub mod workspace;
 pub mod interactive_execution;
+pub mod data_stream;
