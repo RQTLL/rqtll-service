@@ -10,6 +10,9 @@ use services::package::MyPackageService;
 use services::workspace::MyWorkspaceService;
 use services::interactive_execution::MyCommandExecutionService;
 use services::data_stream::MyDataStreamService;
+use services::build::MyBuildService;
+use services::introspection::MyIntrospectionService;
+use services::execution::MyExecutionService;
 use utils::apt::get_ros_distro;
 
 use rqtll_api::rqtll::api::v1::clone_workspace_service_server::CloneWorkspaceServiceServer;
@@ -18,6 +21,9 @@ use rqtll_api::rqtll::api::v1::ros_installer_service_server::RosInstallerService
 use rqtll_api::rqtll::api::v1::workspace_service_server::WorkspaceServiceServer;
 use rqtll_api::rqtll::api::v1::command_execution_service_server::CommandExecutionServiceServer;
 use rqtll_api::rqtll::api::v1::data_stream_service_server::DataStreamServiceServer;
+use rqtll_api::rqtll::api::v1::build_service_server::BuildServiceServer;
+use rqtll_api::rqtll::api::v1::introspection_service_server::IntrospectionServiceServer;
+use rqtll_api::rqtll::api::v1::execution_service_server::ExecutionServiceServer;
 use rqtll_api::rqtll::api::v1::FILE_DESCRIPTOR_SET;
 
 #[tokio::main]
@@ -34,6 +40,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let workspace_svc = WorkspaceServiceServer::new(MyWorkspaceService::default());
     let execution_svc = CommandExecutionServiceServer::new(MyCommandExecutionService::default());
     let data_stream_svc = DataStreamServiceServer::new(MyDataStreamService::default());
+    let build_svc = BuildServiceServer::new(MyBuildService::default());
+    let introspection_svc = IntrospectionServiceServer::new(MyIntrospectionService::default());
+    let node_exec_svc = ExecutionServiceServer::new(MyExecutionService::default());
 
     println!(">_ RQTLL-API Backend");
     println!("   {}@ROS2 {}", addr, get_ros_distro().await);
@@ -46,6 +55,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add_service(workspace_svc)
         .add_service(execution_svc)
         .add_service(data_stream_svc)
+        .add_service(build_svc)
+        .add_service(introspection_svc)
+        .add_service(node_exec_svc)
         .serve(addr)
         .await?;
 

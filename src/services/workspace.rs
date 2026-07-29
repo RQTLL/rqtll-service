@@ -6,11 +6,13 @@ use rqtll_api::rqtll::api::v1::workspace_service_server::WorkspaceService;
 use rqtll_api::rqtll::api::v1::{
     CreateNodesAndLaunchersRequest, CreatePackageRequest, CreateWorkspaceRequest,
     ListWorkspacePackagesRequest, ListWorkspacePackagesResponse, OpenWorkspaceRequest,
-    OpenWorkspaceResponse,
+    OpenWorkspaceResponse, WorkspacePackageInfo,
 };
 
 use crate::utils::apt::get_ros_distro;
 use crate::utils::fs::expand_home_dir;
+
+pub static ACTIVE_WORKSPACE: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 
 fn find_templates_dir() -> Option<PathBuf> {
     let candidates = [
@@ -42,18 +44,57 @@ fn to_pascal_case(s: &str) -> String {
 #[derive(Debug, Default)]
 pub struct MyWorkspaceService;
 
+pub fn scan_packages_in_workspace(ws_path: &str) -> Vec<WorkspacePackageInfo> {
+    let mut packages = vec![];
+    let path_buf = PathBuf::from(ws_path);
+    let src_buf = path_buf.join("src");
+    if src_buf.exists() && src_buf.is_dir() {
+        fn find_packages(dir: &PathBuf, list: &mut Vec<WorkspacePackageInfo>) {
+            if let Ok(entries) = std::fs::read_dir(dir) {
+                for entry in entries.filter_map(Result::ok) {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        let pkg_xml = path.join("package.xml");
+                        if pkg_xml.exists() {
+                            let pkg_name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                            list.push(WorkspacePackageInfo {
+                                name: pkg_name,
+                                path: path.to_string_lossy().to_string(),
+                                build_type: "ament_cmake".to_string(),
+                            });
+                        } else {
+                            find_packages(&path, list);
+                        }
+                    }
+                }
+            }
+        }
+        find_packages(&src_buf, &mut packages);
+    }
+    packages
+}
+
 #[tonic::async_trait]
 impl WorkspaceService for MyWorkspaceService {
     async fn open_workspace(
         &self,
-        _req: Request<OpenWorkspaceRequest>,
+        req: Request<OpenWorkspaceRequest>,
     ) -> Result<Response<OpenWorkspaceResponse>, Status> {
+        let req = req.into_inner();
+        let path = expand_home_dir(&req.path);
+        
+        let packages = scan_packages_in_workspace(&path);
+
+        if let Ok(mut lock) = ACTIVE_WORKSPACE.lock() {
+            *lock = Some(path.clone());
+        }
+
         Ok(Response::new(OpenWorkspaceResponse {
-            packages: vec![],
+            packages,
             status: Some(rqtll_api::rqtll::api::v1::Status {
                 ok: true,
                 code: 0,
-                message: "Stub implementation".to_string(),
+                message: "Workspace opened successfully".to_string(),
                 details: std::collections::HashMap::new(),
             }),
         }))
@@ -61,14 +102,25 @@ impl WorkspaceService for MyWorkspaceService {
 
     async fn list_packages(
         &self,
-        _req: Request<ListWorkspacePackagesRequest>,
+        req: Request<ListWorkspacePackagesRequest>,
     ) -> Result<Response<ListWorkspacePackagesResponse>, Status> {
+        let req = req.into_inner();
+        let path = if !req.workspace_path.is_empty() {
+            expand_home_dir(&req.workspace_path)
+        } else if let Ok(lock) = ACTIVE_WORKSPACE.lock() {
+            lock.clone().unwrap_or_else(|| "/home/akey/Proyectos/rqtll".to_string())
+        } else {
+            "/home/akey/Proyectos/rqtll".to_string()
+        };
+
+        let packages = scan_packages_in_workspace(&path);
+
         Ok(Response::new(ListWorkspacePackagesResponse {
-            packages: vec![],
+            packages,
             status: Some(rqtll_api::rqtll::api::v1::Status {
                 ok: true,
                 code: 0,
-                message: "Stub implementation".to_string(),
+                message: "Packages listed".to_string(),
                 details: std::collections::HashMap::new(),
             }),
         }))

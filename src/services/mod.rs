@@ -4,3 +4,6 @@ pub mod installer;
 pub mod workspace;
 pub mod interactive_execution;
 pub mod data_stream;
+pub mod build;
+pub mod introspection;
+pub mod execution;
