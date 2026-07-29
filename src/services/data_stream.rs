@@ -389,6 +389,7 @@ impl DataStreamService for MyDataStreamService {
 
         let mut child = tokio::process::Command::new("ros2")
             .args(&args)
+            .env("RCUTILS_COLORIZED_OUTPUT", "1")
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
@@ -496,6 +497,7 @@ impl DataStreamService for MyDataStreamService {
 
         let mut child = tokio::process::Command::new("ros2")
             .args(&args)
+            .env("RCUTILS_COLORIZED_OUTPUT", "1")
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()

@@ -60,6 +60,7 @@ impl ExecutionService for MyExecutionService {
 
         let mut child = tokio::process::Command::new("bash")
             .args(&["-c", &cmd_str])
+            .env("RCUTILS_COLORIZED_OUTPUT", "1")
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
