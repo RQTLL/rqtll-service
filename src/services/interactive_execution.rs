@@ -409,6 +409,7 @@ impl CommandExecutionService for MyCommandExecutionService {
         // Spawn child process (standard command)
         let mut command = Command::new(&cmd_bin);
         command.args(&cmd_args)
+            .env("RCUTILS_COLORIZED_OUTPUT", "1")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
