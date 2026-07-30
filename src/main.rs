@@ -13,6 +13,8 @@ use services::data_stream::MyDataStreamService;
 use services::build::MyBuildService;
 use services::introspection::MyIntrospectionService;
 use services::execution::MyExecutionService;
+use services::file_system::MyFileService;
+use services::terminal::MyTerminalService;
 use utils::apt::get_ros_distro;
 
 use rqtll_api::rqtll::api::v1::clone_workspace_service_server::CloneWorkspaceServiceServer;
@@ -24,6 +26,8 @@ use rqtll_api::rqtll::api::v1::data_stream_service_server::DataStreamServiceServ
 use rqtll_api::rqtll::api::v1::build_service_server::BuildServiceServer;
 use rqtll_api::rqtll::api::v1::introspection_service_server::IntrospectionServiceServer;
 use rqtll_api::rqtll::api::v1::execution_service_server::ExecutionServiceServer;
+use rqtll_api::rqtll::api::v1::file_service_server::FileServiceServer;
+use rqtll_api::rqtll::api::v1::terminal_service_server::TerminalServiceServer;
 use rqtll_api::rqtll::api::v1::FILE_DESCRIPTOR_SET;
 
 #[tokio::main]
@@ -43,6 +47,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let build_svc = BuildServiceServer::new(MyBuildService::default());
     let introspection_svc = IntrospectionServiceServer::new(MyIntrospectionService::default());
     let node_exec_svc = ExecutionServiceServer::new(MyExecutionService::default());
+    let file_svc = FileServiceServer::new(MyFileService::default());
+    let terminal_svc = TerminalServiceServer::new(MyTerminalService::default());
 
     println!(">_ RQTLL-API Backend");
     println!("   {}@ROS2 {}", addr, get_ros_distro().await);
@@ -58,6 +64,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add_service(build_svc)
         .add_service(introspection_svc)
         .add_service(node_exec_svc)
+        .add_service(file_svc)
+        .add_service(terminal_svc)
         .serve(addr)
         .await?;
 

@@ -66,7 +66,7 @@ impl IntrospectionService for MyIntrospectionService {
         _req: Request<Empty>,
     ) -> Result<Response<ListTopicsResponse>, Status> {
         let output = tokio::process::Command::new("ros2")
-            .args(&["topic", "list"])
+            .args(&["topic", "list", "-t"])
             .output()
             .await
             .map_err(|e| Status::internal(format!("Failed to list topics: {e}")))?;
@@ -75,38 +75,31 @@ impl IntrospectionService for MyIntrospectionService {
         let mut topics = Vec::new();
 
         for line in stdout_str.lines() {
-            let topic_name = line.trim();
-            if !topic_name.is_empty() {
-                let mut message_type = "unknown".to_string();
-                let mut publisher_count = 0;
-                let mut subscriber_count = 0;
-
-                let info_out = tokio::process::Command::new("ros2")
-                    .args(&["topic", "info", topic_name])
-                    .output()
-                    .await;
-                
-                if let Ok(out) = info_out {
-                    let info_str = String::from_utf8_lossy(&out.stdout);
-                    for info_line in info_str.lines() {
-                        let info_line = info_line.trim();
-                        if info_line.contains("Type:") {
-                            message_type = info_line.split("Type:").nth(1).unwrap_or("").trim().to_string();
-                        } else if info_line.contains("Publisher count:") {
-                            publisher_count = info_line.split("Publisher count:").nth(1).unwrap_or("").trim().parse::<i32>().unwrap_or(0);
-                        } else if info_line.contains("Subscription count:") || info_line.contains("Subscriber count:") {
-                            subscriber_count = info_line.split(":").nth(1).unwrap_or("").trim().parse::<i32>().unwrap_or(0);
-                        }
-                    }
+            let line = line.trim();
+            if !line.is_empty() {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 2 {
+                    let name = parts[0].to_string();
+                    let message_type = parts[1]
+                        .trim_matches(|c| c == '[' || c == ']')
+                        .to_string();
+                    
+                    topics.push(TopicInfoExtended {
+                        name,
+                        message_type,
+                        publisher_count: 0,
+                        subscriber_count: 0,
+                        qos_profiles: vec![],
+                    });
+                } else if parts.len() == 1 {
+                    topics.push(TopicInfoExtended {
+                        name: parts[0].to_string(),
+                        message_type: "unknown".to_string(),
+                        publisher_count: 0,
+                        subscriber_count: 0,
+                        qos_profiles: vec![],
+                    });
                 }
-
-                topics.push(TopicInfoExtended {
-                    name: topic_name.to_string(),
-                    message_type,
-                    publisher_count,
-                    subscriber_count,
-                    qos_profiles: vec![],
-                });
             }
         }
 

@@ -7,3 +7,5 @@ pub mod data_stream;
 pub mod build;
 pub mod introspection;
 pub mod execution;
+pub mod file_system;
+pub mod terminal;
