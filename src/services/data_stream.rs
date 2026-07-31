@@ -11,6 +11,8 @@ use rqtll_api::rqtll::api::v1::{
     Status as ApiStatus, LogEntry, LogLevel,
 };
 
+
+
 pub struct MyDataStreamService;
 
 impl Default for MyDataStreamService {
@@ -351,11 +353,25 @@ impl DataStreamService for MyDataStreamService {
         let req = req.into_inner();
         let topic = req.topic.clone();
         let msg_type = req.message_type.clone();
-        let data_str = String::from_utf8_lossy(&req.data).to_string();
+        let mut data_str = String::from_utf8_lossy(&req.data).to_string();
+        
+        // Clean leading/trailing quotes if they were added in the UI
+        data_str = data_str.trim().to_string();
+        if (data_str.starts_with('\'') && data_str.ends_with('\'')) ||
+           (data_str.starts_with('"') && data_str.ends_with('"')) {
+            data_str = data_str[1..data_str.len()-1].trim().to_string();
+        }
+
+        println!("[gRPC Backend] Publish Request: topic={}, msg_type={}, data={}", topic, msg_type, data_str);
 
         tokio::spawn(async move {
             let mut cmd = tokio::process::Command::new("ros2");
-            cmd.args(&["topic", "pub", "-1", &topic, &msg_type, &data_str]);
+            cmd.args(&[
+                "topic", "pub", 
+                "-1", 
+                "--max-wait-time-secs", "2", 
+                &topic, &msg_type, &data_str
+            ]);
             let _ = cmd.spawn();
         });
 
