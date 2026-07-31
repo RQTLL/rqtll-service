@@ -22,9 +22,16 @@ impl IntrospectionService for MyIntrospectionService {
         &self,
         _req: Request<Empty>,
     ) -> Result<Response<ListNodesResponse>, Status> {
-        let output = tokio::process::Command::new("ros2")
-            .args(&["node", "list"])
-            .output()
+        let ws_path = {
+            if let Ok(lock) = crate::services::workspace::ACTIVE_WORKSPACE.lock() {
+                lock.clone().unwrap_or_else(|| "".to_string())
+            } else {
+                "".to_string()
+            }
+        };
+
+        let mut cmd = crate::utils::apt::create_ros2_command(&ws_path, &["node", "list"]).await;
+        let output = cmd.output()
             .await
             .map_err(|e| Status::internal(format!("Failed to list nodes: {e}")))?;
 
@@ -65,9 +72,16 @@ impl IntrospectionService for MyIntrospectionService {
         &self,
         _req: Request<Empty>,
     ) -> Result<Response<ListTopicsResponse>, Status> {
-        let output = tokio::process::Command::new("ros2")
-            .args(&["topic", "list", "-t"])
-            .output()
+        let ws_path = {
+            if let Ok(lock) = crate::services::workspace::ACTIVE_WORKSPACE.lock() {
+                lock.clone().unwrap_or_else(|| "".to_string())
+            } else {
+                "".to_string()
+            }
+        };
+
+        let mut cmd = crate::utils::apt::create_ros2_command(&ws_path, &["topic", "list", "-t"]).await;
+        let output = cmd.output()
             .await
             .map_err(|e| Status::internal(format!("Failed to list topics: {e}")))?;
 

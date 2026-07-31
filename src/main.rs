@@ -54,6 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let system_utils_svc = SystemUtilsServer::new(MySystemUtilsService::default());
 
     println!(">_ RQTLL-API Backend");
+    utils::apt::load_ros_environment("").await;
     println!("   {}@ROS2 {}", addr, get_ros_distro().await);
 
     Server::builder()

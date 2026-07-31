@@ -3,6 +3,7 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 use tokio::io::AsyncReadExt;
+use tokio::io::AsyncBufReadExt;
 
 use rqtll_api::rqtll::api::v1::data_stream_service_server::DataStreamService;
 use rqtll_api::rqtll::api::v1::{
@@ -35,32 +36,38 @@ impl DataStreamService for MyDataStreamService {
 
         let is_image = topic_name == "image";
 
+        let ws_path = {
+            if let Ok(lock) = crate::services::workspace::ACTIVE_WORKSPACE.lock() {
+                lock.clone().unwrap_or_else(|| "".to_string())
+            } else {
+                "".to_string()
+            }
+        };
+
         if !is_image && !topic_name.is_empty() {
-            let info_out = tokio::process::Command::new("ros2")
-                .args(&["topic", "info", &topic_name])
-                .output()
-                .await;
+            let mut info_cmd = crate::utils::apt::create_ros2_command(&ws_path, &["topic", "info", &topic_name]).await;
+            let info_out = info_cmd.output().await;
             let info_str = match info_out {
                 Ok(out) => String::from_utf8_lossy(&out.stdout).to_string(),
                 Err(e) => format!("Failed to get topic info: {e}"),
             };
 
-            let mut echo_child = tokio::process::Command::new("ros2")
-                .args(&["topic", "echo", &topic_name])
+            let mut echo_cmd = crate::utils::apt::create_ros2_command(&ws_path, &["topic", "echo", &topic_name]).await;
+            let mut echo_child = echo_cmd
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::null())
                 .spawn()
                 .map_err(|e| Status::internal(format!("Failed to run ros2 topic echo: {e}")))?;
 
-            let mut bw_child = tokio::process::Command::new("ros2")
-                .args(&["topic", "bw", &topic_name])
+            let mut bw_cmd = crate::utils::apt::create_ros2_command(&ws_path, &["topic", "bw", &topic_name]).await;
+            let mut bw_child = bw_cmd
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::null())
                 .spawn()
                 .map_err(|e| Status::internal(format!("Failed to run ros2 topic bw: {e}")))?;
 
-            let mut hz_child = tokio::process::Command::new("ros2")
-                .args(&["topic", "hz", &topic_name])
+            let mut hz_cmd = crate::utils::apt::create_ros2_command(&ws_path, &["topic", "hz", &topic_name]).await;
+            let mut hz_child = hz_cmd
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::null())
                 .spawn()
@@ -248,9 +255,16 @@ impl DataStreamService for MyDataStreamService {
 
             return Ok(Response::new(ReceiverStream::new(rx)));
         }
-        let output = tokio::process::Command::new("ros2")
-            .args(&["topic", "list"])
-            .output()
+        let ws_path = {
+            if let Ok(lock) = crate::services::workspace::ACTIVE_WORKSPACE.lock() {
+                lock.clone().unwrap_or_else(|| "".to_string())
+            } else {
+                "".to_string()
+            }
+        };
+
+        let mut list_cmd = crate::utils::apt::create_ros2_command(&ws_path, &["topic", "list"]).await;
+        let output = list_cmd.output()
             .await
             .map_err(|e| Status::internal(format!("Failed to list topics: {e}")))?;
         let stdout_str = String::from_utf8_lossy(&output.stdout);
@@ -258,10 +272,8 @@ impl DataStreamService for MyDataStreamService {
 
         let mut image_topics = Vec::new();
         for t in topics {
-            let info_out = tokio::process::Command::new("ros2")
-                .args(&["topic", "info", t])
-                .output()
-                .await;
+            let mut info_cmd = crate::utils::apt::create_ros2_command(&ws_path, &["topic", "info", t]).await;
+            let info_out = info_cmd.output().await;
             if let Ok(out) = info_out {
                 let info_str = String::from_utf8_lossy(&out.stdout);
                 for line in info_str.lines() {
@@ -304,17 +316,45 @@ impl DataStreamService for MyDataStreamService {
 
         let (selected_topic, is_compressed) = &sorted[0];
 
+        let mut bridge_path = std::path::PathBuf::from("src/services/image_bridge.py");
+        if let Ok(exe_path) = std::env::current_exe() {
+            let mut parent = exe_path.parent();
+            while let Some(p) = parent {
+                if p.file_name().map(|n| n == "rqtll-service").unwrap_or(false) {
+                    let path = p.join("src/services/image_bridge.py");
+                    if path.exists() {
+                        bridge_path = path;
+                        break;
+                    }
+                }
+                parent = p.parent();
+            }
+        }
+
         let mut child = tokio::process::Command::new("python3")
-            .arg("src/services/image_bridge.py")
+            .arg(&bridge_path)
             .arg(selected_topic)
             .arg(if *is_compressed { "true" } else { "false" })
             .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
             .spawn()
-            .map_err(|e| Status::internal(format!("Failed to spawn image bridge: {e}")))?;
+            .map_err(|e| Status::internal(format!("Failed to spawn image bridge at {:?}: {}", bridge_path, e)))?;
 
         let mut stdout = child.stdout.take().ok_or_else(|| Status::internal("Failed to open stdout"))?;
+        let stderr = child.stderr.take().ok_or_else(|| Status::internal("Failed to open stderr"))?;
         let (tx, rx) = mpsc::channel(32);
+
+        tokio::spawn(async move {
+            let mut reader = tokio::io::BufReader::new(stderr);
+            let mut line = String::new();
+            while let Ok(n) = reader.read_line(&mut line).await {
+                if n == 0 {
+                    break;
+                }
+                eprintln!("[ImageBridge Stderr] {}", line.trim_end());
+                line.clear();
+            }
+        });
 
         tokio::spawn(async move {
             let mut len_buf = [0u8; 4];
@@ -364,14 +404,21 @@ impl DataStreamService for MyDataStreamService {
 
         println!("[gRPC Backend] Publish Request: topic={}, msg_type={}, data={}", topic, msg_type, data_str);
 
+        let ws_path = {
+            if let Ok(lock) = crate::services::workspace::ACTIVE_WORKSPACE.lock() {
+                lock.clone().unwrap_or_else(|| "".to_string())
+            } else {
+                "".to_string()
+            }
+        };
+
         tokio::spawn(async move {
-            let mut cmd = tokio::process::Command::new("ros2");
-            cmd.args(&[
+            let mut cmd = crate::utils::apt::create_ros2_command(&ws_path, &[
                 "topic", "pub", 
                 "-1", 
                 "--max-wait-time-secs", "2", 
                 &topic, &msg_type, &data_str
-            ]);
+            ]).await;
             let _ = cmd.spawn();
         });
 
@@ -403,8 +450,17 @@ impl DataStreamService for MyDataStreamService {
             }
         }
 
-        let mut child = tokio::process::Command::new("ros2")
-            .args(&args)
+        let ws_path = {
+            if let Ok(lock) = crate::services::workspace::ACTIVE_WORKSPACE.lock() {
+                lock.clone().unwrap_or_else(|| "".to_string())
+            } else {
+                "".to_string()
+            }
+        };
+
+        let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+        let mut cmd = crate::utils::apt::create_ros2_command(&ws_path, &args_ref).await;
+        let mut child = cmd
             .env("RCUTILS_COLORIZED_OUTPUT", "1")
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -511,8 +567,17 @@ impl DataStreamService for MyDataStreamService {
             args.push("-l".to_string());
         }
 
-        let mut child = tokio::process::Command::new("ros2")
-            .args(&args)
+        let ws_path = {
+            if let Ok(lock) = crate::services::workspace::ACTIVE_WORKSPACE.lock() {
+                lock.clone().unwrap_or_else(|| "".to_string())
+            } else {
+                "".to_string()
+            }
+        };
+
+        let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+        let mut cmd = crate::utils::apt::create_ros2_command(&ws_path, &args_ref).await;
+        let mut child = cmd
             .env("RCUTILS_COLORIZED_OUTPUT", "1")
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())

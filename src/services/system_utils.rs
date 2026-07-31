@@ -14,10 +14,8 @@ impl SystemUtils for MySystemUtilsService {
         &self,
         _req: Request<Empty>,
     ) -> Result<Response<ApiStatus>, Status> {
-        let stop_out = tokio::process::Command::new("ros2")
-            .args(&["daemon", "stop"])
-            .output()
-            .await;
+        let mut stop_cmd = crate::utils::apt::create_ros2_command("", &["daemon", "stop"]).await;
+        let stop_out = stop_cmd.output().await;
 
         match stop_out {
             Ok(stop_res) => {
@@ -28,10 +26,8 @@ impl SystemUtils for MySystemUtilsService {
             }
         }
 
-        let start_out = tokio::process::Command::new("ros2")
-            .args(&["daemon", "start"])
-            .output()
-            .await;
+        let mut start_cmd = crate::utils::apt::create_ros2_command("", &["daemon", "start"]).await;
+        let start_out = start_cmd.output().await;
 
         match start_out {
             Ok(_) => {

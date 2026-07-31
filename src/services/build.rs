@@ -121,10 +121,28 @@ impl BuildService for MyBuildService {
                 let mut nodes = Vec::new();
                 let mut launchers = Vec::new();
 
+                let distro = crate::utils::apt::get_ros_distro().await;
+                let sys_setup = format!("/opt/ros/{}/setup.bash", distro);
+                let mut source_parts = Vec::new();
+                if let Some(domain_id) = crate::utils::apt::get_configured_domain_id() {
+                    source_parts.push(format!("export ROS_DOMAIN_ID={}", domain_id));
+                }
+                if std::path::Path::new(&sys_setup).exists() {
+                    source_parts.push(format!("source {}", sys_setup));
+                }
+                if has_setup {
+                    source_parts.push(format!("source {}", setup_path.to_string_lossy()));
+                }
+                let source_prefix = if source_parts.is_empty() {
+                    "".to_string()
+                } else {
+                    format!("{} && ", source_parts.join(" && "))
+                };
+
                 for pkg in pkgs {
                     // 1. Get executables (nodes) for this workspace package
                     if has_setup {
-                        let cmd_str = format!("source {} && ros2 pkg executables {}", setup_path.to_string_lossy(), pkg.name);
+                        let cmd_str = format!("{}ros2 pkg executables {}", source_prefix, pkg.name);
                         let out = tokio::process::Command::new("bash")
                             .args(&["-c", &cmd_str])
                             .output()

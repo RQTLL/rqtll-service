@@ -89,6 +89,8 @@ impl WorkspaceService for MyWorkspaceService {
             *lock = Some(path.clone());
         }
 
+        crate::utils::apt::load_ros_environment(&path).await;
+
         Ok(Response::new(OpenWorkspaceResponse {
             packages,
             status: Some(rqtll_api::rqtll::api::v1::Status {

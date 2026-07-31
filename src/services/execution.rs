@@ -33,29 +33,32 @@ impl ExecutionService for MyExecutionService {
             }
         };
 
+        crate::utils::apt::load_ros_environment(&ws_path).await;
+
+        let distro = crate::utils::apt::get_ros_distro().await;
+        let sys_setup = format!("/opt/ros/{}/setup.bash", distro);
+        let mut source_parts = Vec::new();
+        if let Some(domain_id) = crate::utils::apt::get_configured_domain_id() {
+            source_parts.push(format!("export ROS_DOMAIN_ID={}", domain_id));
+        }
+        if std::path::Path::new(&sys_setup).exists() {
+            source_parts.push(format!("source {}", sys_setup));
+        }
         let setup_path = PathBuf::from(&ws_path).join("install/setup.bash");
-        let cmd_str = if setup_path.exists() {
-            if req.use_launch {
-                format!(
-                    "source {} && ros2 launch {} {}",
-                    setup_path.to_string_lossy(),
-                    req.package,
-                    req.launch_file
-                )
-            } else {
-                format!(
-                    "source {} && ros2 run {} {}",
-                    setup_path.to_string_lossy(),
-                    req.package,
-                    req.executable
-                )
-            }
+        if setup_path.exists() {
+            source_parts.push(format!("source {}", setup_path.to_string_lossy()));
+        }
+        
+        let run_cmd = if req.use_launch {
+            format!("ros2 launch {} {}", req.package, req.launch_file)
         } else {
-            if req.use_launch {
-                format!("ros2 launch {} {}", req.package, req.launch_file)
-            } else {
-                format!("ros2 run {} {}", req.package, req.executable)
-            }
+            format!("ros2 run {} {}", req.package, req.executable)
+        };
+        
+        let cmd_str = if source_parts.is_empty() {
+            run_cmd
+        } else {
+            format!("{} && {}", source_parts.join(" && "), run_cmd)
         };
 
         let mut child = tokio::process::Command::new("bash")
