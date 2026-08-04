@@ -124,6 +124,12 @@ impl DataStreamService for MyDataStreamService {
                 let mut latest_hz = "Frecuencia: ---".to_string();
                 let mut skipping_data = false;
 
+                let msg_type_lower = msg_type.to_ascii_lowercase();
+                let should_filter_large_data = msg_type_lower.contains("image")
+                    || msg_type_lower.contains("pointcloud2")
+                    || msg_type_lower.contains("laserscan")
+                    || msg_type_lower.contains("occupancygrid");
+
                 loop {
                     tokio::select! {
                         res = echo_reader.next_line() => {
@@ -157,13 +163,13 @@ impl DataStreamService for MyDataStreamService {
                                             current_echo_msg.clear();
                                         }
                                     } else {
-                                        if trimmed.starts_with("data:") {
+                                        if should_filter_large_data && trimmed.starts_with("data:") {
                                             current_echo_msg.push(line.clone());
                                             let indent = line.len() - trimmed.len();
                                             let spaces = " ".repeat(indent);
                                             current_echo_msg.push(format!("{}  ...", spaces));
                                             skipping_data = true;
-                                        } else if skipping_data {
+                                        } else if should_filter_large_data && skipping_data {
                                             if trimmed.starts_with("-") || trimmed.chars().all(|c| c.is_numeric() || c == '.' || c == '-' || c == ',' || c == ' ') {
                                                 // Skip
                                             } else {
