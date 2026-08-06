@@ -96,6 +96,19 @@ impl DataStreamService for MyDataStreamService {
                 if let Some(p) = hz_pid {
                     let _ = std::process::Command::new("kill").args(&["-2", &p.to_string()]).status();
                 }
+
+                // Allow 500ms for graceful cleanup, then force-kill to prevent orphan nodes
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+                if let Some(p) = echo_pid {
+                    let _ = std::process::Command::new("kill").args(&["-9", &p.to_string()]).status();
+                }
+                if let Some(p) = bw_pid {
+                    let _ = std::process::Command::new("kill").args(&["-9", &p.to_string()]).status();
+                }
+                if let Some(p) = hz_pid {
+                    let _ = std::process::Command::new("kill").args(&["-9", &p.to_string()]).status();
+                }
             });
 
             let info_base = info_str.clone();
