@@ -375,17 +375,25 @@ impl DataStreamService for MyDataStreamService {
         let (selected_topic, is_compressed) = &sorted[0];
 
         let mut bridge_path = std::path::PathBuf::from("src/services/image_bridge.py");
-        if let Ok(exe_path) = std::env::current_exe() {
-            let mut parent = exe_path.parent();
-            while let Some(p) = parent {
-                if p.file_name().map(|n| n == "rqtll-service").unwrap_or(false) {
-                    let path = p.join("src/services/image_bridge.py");
-                    if path.exists() {
-                        bridge_path = path;
-                        break;
+        if !bridge_path.exists() {
+            let share_path = std::path::PathBuf::from("/usr/share/rqtll/image_bridge.py");
+            if share_path.exists() {
+                bridge_path = share_path;
+            }
+        }
+        if !bridge_path.exists() {
+            if let Ok(exe_path) = std::env::current_exe() {
+                let mut parent = exe_path.parent();
+                while let Some(p) = parent {
+                    if p.file_name().map(|n| n == "rqtll-service").unwrap_or(false) {
+                        let path = p.join("src/services/image_bridge.py");
+                        if path.exists() {
+                            bridge_path = path;
+                            break;
+                        }
                     }
+                    parent = p.parent();
                 }
-                parent = p.parent();
             }
         }
 
