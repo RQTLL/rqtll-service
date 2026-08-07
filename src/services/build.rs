@@ -1,19 +1,18 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::pin::Pin;
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::Stream;
 use tonic::{Request, Response, Status};
-use tokio::io::{AsyncBufReadExt, BufReader};
 
 use rqtll_api::rqtll::api::v1::build_service_server::BuildService;
 use rqtll_api::rqtll::api::v1::{
-    BuildRequest, BuildEvent, CleanRequest, LoadRequest, Status as ApiStatus,
-    LogEntry, LogLevel,
+    BuildEvent, BuildRequest, CleanRequest, LoadRequest, LogEntry, LogLevel, Status as ApiStatus,
 };
 
-use crate::services::workspace::{ACTIVE_WORKSPACE, scan_packages_in_workspace};
+use crate::services::workspace::{scan_packages_in_workspace, ACTIVE_WORKSPACE};
 
 pub struct MyBuildService;
 
@@ -36,7 +35,8 @@ impl BuildService for MyBuildService {
             req.workspace_path.clone()
         } else {
             if let Ok(lock) = ACTIVE_WORKSPACE.lock() {
-                lock.clone().unwrap_or_else(|| "/home/akey/Proyectos/rqtll".to_string())
+                lock.clone()
+                    .unwrap_or_else(|| "/home/akey/Proyectos/rqtll".to_string())
             } else {
                 "/home/akey/Proyectos/rqtll".to_string()
             }
@@ -58,8 +58,14 @@ impl BuildService for MyBuildService {
             .spawn()
             .map_err(|e| Status::internal(format!("Failed to run colcon build: {e}")))?;
 
-        let stdout = child.stdout.take().ok_or_else(|| Status::internal("Failed to open stdout"))?;
-        let stderr = child.stderr.take().ok_or_else(|| Status::internal("Failed to open stderr"))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| Status::internal("Failed to open stdout"))?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| Status::internal("Failed to open stderr"))?;
 
         let (tx, rx) = mpsc::channel(128);
 
@@ -159,9 +165,17 @@ impl BuildService for MyBuildService {
                     }
 
                     // 2. Scan install/<pkg>/share/<pkg> for launchers
-                    let pkg_share = PathBuf::from(&ws_path).join("install").join(&pkg.name).join("share").join(&pkg.name);
+                    let pkg_share = PathBuf::from(&ws_path)
+                        .join("install")
+                        .join(&pkg.name)
+                        .join("share")
+                        .join(&pkg.name);
                     if pkg_share.exists() {
-                        fn find_pkg_launchers(dir: &PathBuf, pkg_name: &str, list: &mut Vec<String>) {
+                        fn find_pkg_launchers(
+                            dir: &PathBuf,
+                            pkg_name: &str,
+                            list: &mut Vec<String>,
+                        ) {
                             if let Ok(entries) = std::fs::read_dir(dir) {
                                 for entry in entries.filter_map(Result::ok) {
                                     let path = entry.path();
@@ -171,10 +185,18 @@ impl BuildService for MyBuildService {
                                         if let Some(ext) = path.extension() {
                                             if ext == "py" || ext == "xml" || ext == "yaml" {
                                                 if let Some(stem) = path.file_stem() {
-                                                    let stem_str = stem.to_string_lossy().to_string();
+                                                    let stem_str =
+                                                        stem.to_string_lossy().to_string();
                                                     if stem_str.contains(".launch") {
-                                                        let full_launch_name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
-                                                        list.push(format!("{}/{}", pkg_name, full_launch_name));
+                                                        let full_launch_name = path
+                                                            .file_name()
+                                                            .unwrap_or_default()
+                                                            .to_string_lossy()
+                                                            .to_string();
+                                                        list.push(format!(
+                                                            "{}/{}",
+                                                            pkg_name, full_launch_name
+                                                        ));
                                                     }
                                                 }
                                             }
@@ -196,12 +218,14 @@ impl BuildService for MyBuildService {
             }
 
             let final_event = BuildEvent {
-                ev: Some(rqtll_api::rqtll::api::v1::build_event::Ev::Status(ApiStatus {
-                    ok: success,
-                    code: if success { 0 } else { 2 },
-                    message: status_msg,
-                    details,
-                })),
+                ev: Some(rqtll_api::rqtll::api::v1::build_event::Ev::Status(
+                    ApiStatus {
+                        ok: success,
+                        code: if success { 0 } else { 2 },
+                        message: status_msg,
+                        details,
+                    },
+                )),
             };
 
             let _ = tx.send(Ok(final_event)).await;
@@ -217,7 +241,8 @@ impl BuildService for MyBuildService {
     ) -> Result<Response<ApiStatus>, Status> {
         let req = req.into_inner();
         let ws_path = if let Ok(lock) = ACTIVE_WORKSPACE.lock() {
-            lock.clone().unwrap_or_else(|| "/home/akey/Proyectos/rqtll".to_string())
+            lock.clone()
+                .unwrap_or_else(|| "/home/akey/Proyectos/rqtll".to_string())
         } else {
             "/home/akey/Proyectos/rqtll".to_string()
         };

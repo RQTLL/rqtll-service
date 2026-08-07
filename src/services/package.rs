@@ -6,7 +6,9 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 
 use rqtll_api::rqtll::api::v1::package_service_server::PackageService;
-use rqtll_api::rqtll::api::v1::{InstallProgress, InstallRequest, ListPackagesRequest, PackageInfo};
+use rqtll_api::rqtll::api::v1::{
+    InstallProgress, InstallRequest, ListPackagesRequest, PackageInfo,
+};
 
 use crate::utils::admin::run_apt_action_pkexec;
 use crate::utils::apt::{check_if_installed, get_all_installed_matching_prefixes, get_ros_distro};
@@ -34,7 +36,7 @@ impl PackageService for MyPackageService {
     ) -> Result<Response<Self::ListAvailablePackagesStream>, Status> {
         let req = req.into_inner();
         let user_filter = req.filter;
-        
+
         let mut prefixes = Vec::new();
         if req.show_ros {
             prefixes.push("ros");
@@ -45,11 +47,11 @@ impl PackageService for MyPackageService {
         if req.show_rti {
             prefixes.push("rti");
         }
-        
+
         if prefixes.is_empty() {
             prefixes.extend(&["ros", "rti", "python3"]);
         }
-        
+
         let prefix_regex = prefixes.join("|");
         let regex_filter = if user_filter.is_empty() {
             format!(r"^({})-", prefix_regex)
@@ -114,10 +116,12 @@ impl PackageService for MyPackageService {
                     eprintln!("Error spawning pkexec: {e}");
                     let mut lock = is_installing_flag.lock().await;
                     *lock = false;
-                    let _ = tx.send(Ok(InstallProgress {
-                        log_line: "ERROR_LAUNCH_FAILED".to_string(),
-                        progress: 0.0,
-                    })).await;
+                    let _ = tx
+                        .send(Ok(InstallProgress {
+                            log_line: "ERROR_LAUNCH_FAILED".to_string(),
+                            progress: 0.0,
+                        }))
+                        .await;
                     return;
                 }
             };
@@ -126,10 +130,12 @@ impl PackageService for MyPackageService {
                 use tokio::io::AsyncBufReadExt;
                 let mut reader = tokio::io::BufReader::new(stdout).lines();
                 while let Ok(Some(line)) = reader.next_line().await {
-                    let _ = tx.send(Ok(InstallProgress {
-                        log_line: line,
-                        progress: 50.0,
-                    })).await;
+                    let _ = tx
+                        .send(Ok(InstallProgress {
+                            log_line: line,
+                            progress: 50.0,
+                        }))
+                        .await;
                 }
             }
 
@@ -143,10 +149,12 @@ impl PackageService for MyPackageService {
                 _ => "ERROR_CANCELLED",
             };
 
-            let _ = tx.send(Ok(InstallProgress {
-                log_line: final_msg.to_string(),
-                progress: 100.0,
-            })).await;
+            let _ = tx
+                .send(Ok(InstallProgress {
+                    log_line: final_msg.to_string(),
+                    progress: 100.0,
+                }))
+                .await;
         });
 
         Ok(Response::new(ReceiverStream::new(rx)))

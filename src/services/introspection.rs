@@ -6,8 +6,8 @@ use tonic::{Request, Response, Status};
 use rqtll_api::rqtll::api::v1::introspection_service_server::IntrospectionService;
 use rqtll_api::rqtll::api::v1::{
     Empty, GraphEvent, IntrospectionFilter, ListGraphResponse, ListNodesResponse,
-    ListTopicsResponse, NodeInfo, NodeInfoExtended, Status as ApiStatus,
-    TopicInfoExtended, TopicMetricsRequest, TopicMetricsResponse,
+    ListTopicsResponse, NodeInfo, NodeInfoExtended, Status as ApiStatus, TopicInfoExtended,
+    TopicMetricsRequest, TopicMetricsResponse,
 };
 
 pub struct MyIntrospectionService;
@@ -128,7 +128,10 @@ fn parse_bw_output(output: &str) -> String {
         let lower = line.to_ascii_lowercase();
         if lower.contains("average:") || lower.contains("/s") || lower.contains("bandwidth") {
             if lower.contains("average:") {
-                return line.split_once(':').map(|(_, val)| val.trim().to_string()).unwrap_or_else(|| line.to_string());
+                return line
+                    .split_once(':')
+                    .map(|(_, val)| val.trim().to_string())
+                    .unwrap_or_else(|| line.to_string());
             }
             return line.to_string();
         }
@@ -180,7 +183,8 @@ impl IntrospectionService for MyIntrospectionService {
         let ws_path = active_workspace_path();
 
         let mut cmd = crate::utils::apt::create_ros2_command(&ws_path, &["node", "list"]).await;
-        let output = cmd.output()
+        let output = cmd
+            .output()
             .await
             .map_err(|e| Status::internal(format!("Failed to list nodes: {e}")))?;
 
@@ -192,7 +196,10 @@ impl IntrospectionService for MyIntrospectionService {
             if !line.is_empty() {
                 let parts: Vec<&str> = line.rsplitn(2, '/').collect();
                 let (name, ns) = if parts.len() == 2 {
-                    (parts[0].to_string(), format!("/{}", parts[1].trim_start_matches('/')))
+                    (
+                        parts[0].to_string(),
+                        format!("/{}", parts[1].trim_start_matches('/')),
+                    )
                 } else {
                     (line.to_string(), "/".to_string())
                 };
@@ -223,8 +230,10 @@ impl IntrospectionService for MyIntrospectionService {
     ) -> Result<Response<ListTopicsResponse>, Status> {
         let ws_path = active_workspace_path();
 
-        let mut cmd = crate::utils::apt::create_ros2_command(&ws_path, &["topic", "list", "-t"]).await;
-        let output = cmd.output()
+        let mut cmd =
+            crate::utils::apt::create_ros2_command(&ws_path, &["topic", "list", "-t"]).await;
+        let output = cmd
+            .output()
             .await
             .map_err(|e| Status::internal(format!("Failed to list topics: {e}")))?;
 
@@ -237,10 +246,8 @@ impl IntrospectionService for MyIntrospectionService {
                 let parts: Vec<&str> = line.split_whitespace().collect();
                 if parts.len() >= 2 {
                     let name = parts[0].to_string();
-                    let message_type = parts[1]
-                        .trim_matches(|c| c == '[' || c == ']')
-                        .to_string();
-                    
+                    let message_type = parts[1].trim_matches(|c| c == '[' || c == ']').to_string();
+
                     topics.push(TopicInfoExtended {
                         name,
                         message_type,
@@ -271,10 +278,7 @@ impl IntrospectionService for MyIntrospectionService {
         }))
     }
 
-    async fn get_graph(
-        &self,
-        _req: Request<Empty>,
-    ) -> Result<Response<ListGraphResponse>, Status> {
+    async fn get_graph(&self, _req: Request<Empty>) -> Result<Response<ListGraphResponse>, Status> {
         let ws_path = active_workspace_path();
         let nodes_response = self.list_nodes(Request::new(Empty {})).await?.into_inner();
 
@@ -313,8 +317,7 @@ impl IntrospectionService for MyIntrospectionService {
                 0,
                 format!(
                     "Graph loaded successfully ({} nodes, {} skipped)",
-                    loaded_nodes,
-                    skipped
+                    loaded_nodes, skipped
                 ),
             )),
         }))
@@ -334,8 +337,10 @@ impl IntrospectionService for MyIntrospectionService {
         let topic_info = run_ros2_output(&ws_path, &["topic", "info", &topic_name]).await?;
         let message_type = parse_topic_type(&topic_info);
 
-        let hz_output = run_ros2_output_with_timeout(&ws_path, &["topic", "hz", &topic_name], 3).await?;
-        let bw_output = run_ros2_output_with_timeout(&ws_path, &["topic", "bw", &topic_name], 2).await?;
+        let hz_output =
+            run_ros2_output_with_timeout(&ws_path, &["topic", "hz", &topic_name], 3).await?;
+        let bw_output =
+            run_ros2_output_with_timeout(&ws_path, &["topic", "bw", &topic_name], 2).await?;
 
         Ok(Response::new(TopicMetricsResponse {
             message_type,
@@ -351,6 +356,8 @@ impl IntrospectionService for MyIntrospectionService {
         _req: Request<IntrospectionFilter>,
     ) -> Result<Response<Self::WatchGraphStream>, Status> {
         let (_tx, rx) = mpsc::channel(1);
-        Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(rx)))
+        Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(
+            rx,
+        )))
     }
 }

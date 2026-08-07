@@ -16,14 +16,17 @@ pub async fn get_ros_distro() -> String {
                 }
             }
         }
-        
+
         if !found_distros.is_empty() {
             found_distros.sort();
             // Try to source the first found distro to confirm it works
             let distro = &found_distros[0];
             let output = Command::new("/bin/bash")
                 .arg("-c")
-                .arg(format!("source /opt/ros/{}/setup.bash && echo $ROS_DISTRO", distro))
+                .arg(format!(
+                    "source /opt/ros/{}/setup.bash && echo $ROS_DISTRO",
+                    distro
+                ))
                 .output()
                 .await;
 
@@ -45,7 +48,13 @@ pub async fn get_ros_distro() -> String {
 pub async fn get_all_installed_matching_prefixes() -> HashSet<String> {
     let mut installed = HashSet::new();
     let output = Command::new("dpkg-query")
-        .args(["-W", "-f=${Package} ${Status}\n", "ros-*", "rti-*", "python3-*"])
+        .args([
+            "-W",
+            "-f=${Package} ${Status}\n",
+            "ros-*",
+            "rti-*",
+            "python3-*",
+        ])
         .output()
         .await;
 
@@ -75,7 +84,7 @@ pub async fn check_if_installed(pkg: &str) -> bool {
 
 pub fn get_configured_domain_id() -> Option<String> {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/home/akey".to_string());
-    
+
     let username = std::env::var("USER").unwrap_or_else(|_| "akey".to_string());
     let mut default_rc = ".bashrc";
     if let Ok(passwd) = std::fs::read_to_string("/etc/passwd") {
@@ -89,7 +98,7 @@ pub fn get_configured_domain_id() -> Option<String> {
             }
         }
     }
-    
+
     let path = std::path::PathBuf::from(&home).join(default_rc);
     if let Ok(content) = std::fs::read_to_string(&path) {
         for line in content.lines() {
@@ -101,8 +110,12 @@ pub fn get_configured_domain_id() -> Option<String> {
             }
         }
     }
-    
-    let fallback_rc = if default_rc == ".bashrc" { ".zshrc" } else { ".bashrc" };
+
+    let fallback_rc = if default_rc == ".bashrc" {
+        ".zshrc"
+    } else {
+        ".bashrc"
+    };
     let path = std::path::PathBuf::from(&home).join(fallback_rc);
     if let Ok(content) = std::fs::read_to_string(&path) {
         for line in content.lines() {
@@ -114,7 +127,7 @@ pub fn get_configured_domain_id() -> Option<String> {
             }
         }
     }
-    
+
     None
 }
 
@@ -122,12 +135,12 @@ pub async fn load_ros_environment(ws_path: &str) {
     let distro = get_ros_distro().await;
     let sys_setup = format!("/opt/ros/{}/setup.bash", distro);
     let mut source_parts = Vec::new();
-    
+
     if let Some(domain_id) = get_configured_domain_id() {
         source_parts.push(format!("export ROS_DOMAIN_ID={}", domain_id));
         std::env::set_var("ROS_DOMAIN_ID", &domain_id);
     }
-    
+
     if std::path::Path::new(&sys_setup).exists() {
         source_parts.push(format!("source {}", sys_setup));
     }
@@ -137,33 +150,34 @@ pub async fn load_ros_environment(ws_path: &str) {
             source_parts.push(format!("source {}", ws_setup.to_string_lossy()));
         }
     }
-    
+
     let source_cmd = if source_parts.is_empty() {
         "env".to_string()
     } else {
         format!("{} && env", source_parts.join(" && "))
     };
-    
+
     let output = Command::new("bash")
         .arg("-c")
         .arg(&source_cmd)
         .output()
         .await;
-        
+
     if let Ok(out) = output {
         let stdout = String::from_utf8_lossy(&out.stdout);
         for line in stdout.lines() {
             if let Some(idx) = line.find('=') {
                 let key = &line[..idx];
-                let value = &line[idx+1..];
-                if key.starts_with("ROS_") || 
-                   key.starts_with("AMENT_") || 
-                   key == "PATH" || 
-                   key == "LD_LIBRARY_PATH" || 
-                   key == "PYTHONPATH" || 
-                   key.starts_with("GZ_") || 
-                   key.starts_with("GAZEBO_") ||
-                   key == "CMAKE_PREFIX_PATH" {
+                let value = &line[idx + 1..];
+                if key.starts_with("ROS_")
+                    || key.starts_with("AMENT_")
+                    || key == "PATH"
+                    || key == "LD_LIBRARY_PATH"
+                    || key == "PYTHONPATH"
+                    || key.starts_with("GZ_")
+                    || key.starts_with("GAZEBO_")
+                    || key == "CMAKE_PREFIX_PATH"
+                {
                     std::env::set_var(key, value);
                 }
             }

@@ -7,16 +7,17 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 
 use rqtll_api::rqtll::api::v1::ros_installer_service_server::RosInstallerService;
-use rqtll_api::rqtll::api::v1::{EnvInstallProgress, EnvInstallRequest, StepStatus, ConfigureEnvRequest};
+use rqtll_api::rqtll::api::v1::{
+    ConfigureEnvRequest, EnvInstallProgress, EnvInstallRequest, StepStatus,
+};
 
 use crate::utils::admin::run_apt_install_sudo;
 
 #[derive(Debug, Default)]
 pub struct MyROSInstallerService;
 
-type ResponseStream = Pin<
-    Box<dyn tokio_stream::Stream<Item = Result<EnvInstallProgress, Status>> + Send>,
->;
+type ResponseStream =
+    Pin<Box<dyn tokio_stream::Stream<Item = Result<EnvInstallProgress, Status>> + Send>>;
 
 #[tonic::async_trait]
 impl RosInstallerService for MyROSInstallerService {
@@ -30,11 +31,9 @@ impl RosInstallerService for MyROSInstallerService {
     ) -> Result<Response<Self::InstallEnvironmentStream>, Status> {
         let (tx, rx) = mpsc::channel(128);
 
-        let home_dir = std::path::PathBuf::from(
-            std::env::var("HOME").map_err(|_| {
-                Status::internal("No se pudo determinar el directorio HOME del usuario")
-            })?,
-        );
+        let home_dir = std::path::PathBuf::from(std::env::var("HOME").map_err(|_| {
+            Status::internal("No se pudo determinar el directorio HOME del usuario")
+        })?);
 
         tokio::spawn(async move {
             if let Err(e) = run_installation_workflow(home_dir, tx).await {
@@ -114,12 +113,8 @@ async fn run_installation_workflow(
     )
     .await;
 
-    let mut cmd = run_apt_install_sudo(&[
-        "software-properties-common",
-        "lsb-release",
-        "gnupg",
-        "curl",
-    ])?;
+    let mut cmd =
+        run_apt_install_sudo(&["software-properties-common", "lsb-release", "gnupg", "curl"])?;
 
     stream_command_output(&mut cmd, &tx, "INSTALL_DEPS", 20).await?;
 
@@ -265,14 +260,24 @@ async fn send_status(
 async fn run_setup_repositories_workflow(
     tx: mpsc::Sender<Result<EnvInstallProgress, Status>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    send_status(&tx, "SETUP_REPOS_CHECK", "Comprobando repositorios existentes...", StepStatus::Running, 0).await;
+    send_status(
+        &tx,
+        "SETUP_REPOS_CHECK",
+        "Comprobando repositorios existentes...",
+        StepStatus::Running,
+        0,
+    )
+    .await;
 
     let mut already_configured = false;
-    for distro in &["bouncy", "crystal", "dashing", "eloquent", "foxy", "galactic", "humble", "iron", "jazzy", "kilted", "lyrical", "rolling"] {
+    for distro in &[
+        "bouncy", "crystal", "dashing", "eloquent", "foxy", "galactic", "humble", "iron", "jazzy",
+        "kilted", "lyrical", "rolling",
+    ] {
         if let Ok(output) = Command::new("apt-cache")
             .args(&["search", &format!("ros-{}-desktop", distro)])
             .output()
-            .await 
+            .await
         {
             if !output.stdout.is_empty() {
                 already_configured = true;
@@ -282,11 +287,25 @@ async fn run_setup_repositories_workflow(
     }
 
     if already_configured {
-        send_status(&tx, "SETUP_REPOS_SUCCESS", "Repositorios de ROS 2 ya configurados.", StepStatus::Success, 100).await;
+        send_status(
+            &tx,
+            "SETUP_REPOS_SUCCESS",
+            "Repositorios de ROS 2 ya configurados.",
+            StepStatus::Success,
+            100,
+        )
+        .await;
         return Ok(());
     }
 
-    send_status(&tx, "SETUP_REPOS_START", "Solicitando permisos de administrador...", StepStatus::Running, 5).await;
+    send_status(
+        &tx,
+        "SETUP_REPOS_START",
+        "Solicitando permisos de administrador...",
+        StepStatus::Running,
+        5,
+    )
+    .await;
 
     let script = r#"
         exec 2>&1
@@ -333,25 +352,48 @@ async fn run_setup_repositories_workflow(
                         current_percentage = pct;
                     }
                     let msg = parts[2];
-                    send_status(&tx, &current_step_id, msg, StepStatus::Running, current_percentage).await;
+                    send_status(
+                        &tx,
+                        &current_step_id,
+                        msg,
+                        StepStatus::Running,
+                        current_percentage,
+                    )
+                    .await;
                     continue;
                 }
             }
-            
-            let _ = tx.send(Ok(EnvInstallProgress {
-                step_id: current_step_id.clone(),
-                log_line: line,
-                status: StepStatus::Running as i32,
-                progress_percentage: current_percentage,
-            })).await;
+
+            let _ = tx
+                .send(Ok(EnvInstallProgress {
+                    step_id: current_step_id.clone(),
+                    log_line: line,
+                    status: StepStatus::Running as i32,
+                    progress_percentage: current_percentage,
+                }))
+                .await;
         }
     }
 
     let status = child.wait().await?;
     if status.success() {
-        send_status(&tx, "SETUP_REPOS_SUCCESS", "Repositorios configurados con éxito.", StepStatus::Success, 100).await;
+        send_status(
+            &tx,
+            "SETUP_REPOS_SUCCESS",
+            "Repositorios configurados con éxito.",
+            StepStatus::Success,
+            100,
+        )
+        .await;
     } else {
-        send_status(&tx, "SETUP_REPOS_FAILED", "Error al ejecutar la configuración con pkexec.", StepStatus::Failed, current_percentage).await;
+        send_status(
+            &tx,
+            "SETUP_REPOS_FAILED",
+            "Error al ejecutar la configuración con pkexec.",
+            StepStatus::Failed,
+            current_percentage,
+        )
+        .await;
     }
 
     Ok(())
@@ -361,10 +403,19 @@ async fn run_configure_environment_workflow(
     req: ConfigureEnvRequest,
     tx: mpsc::Sender<Result<EnvInstallProgress, Status>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    send_status(&tx, "CONFIGURE_START", "Iniciando configuración...", StepStatus::Running, 0).await;
+    send_status(
+        &tx,
+        "CONFIGURE_START",
+        "Iniciando configuración...",
+        StepStatus::Running,
+        0,
+    )
+    .await;
 
-    let home = std::path::PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/home/akey".to_string()));
-    
+    let home = std::path::PathBuf::from(
+        std::env::var("HOME").unwrap_or_else(|_| "/home/akey".to_string()),
+    );
+
     // 1. Determine user's login shell from /etc/passwd
     let username = std::env::var("USER").unwrap_or_else(|_| "akey".to_string());
     let default_shell = if let Ok(passwd) = std::fs::read_to_string("/etc/passwd") {
@@ -381,10 +432,24 @@ async fn run_configure_environment_workflow(
         std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string())
     };
 
-    let shell_ext = if default_shell.contains("zsh") { "zsh" } else { "bash" };
+    let shell_ext = if default_shell.contains("zsh") {
+        "zsh"
+    } else {
+        "bash"
+    };
     let config_path = home.join(format!(".{}rc", shell_ext));
-    
-    send_status(&tx, "CONFIGURE_SHELL", &format!("Detectada shell por defecto: {}. Configurando archivo: {:?}", default_shell, config_path), StepStatus::Running, 10).await;
+
+    send_status(
+        &tx,
+        "CONFIGURE_SHELL",
+        &format!(
+            "Detectada shell por defecto: {}. Configurando archivo: {:?}",
+            default_shell, config_path
+        ),
+        StepStatus::Running,
+        10,
+    )
+    .await;
 
     let content = if config_path.exists() {
         std::fs::read_to_string(&config_path).unwrap_or_default()
@@ -397,11 +462,22 @@ async fn run_configure_environment_workflow(
     // 2. Configure ROS 2 Source line
     if req.load_ros_shell {
         let source_line = format!("source /opt/ros/{}/setup.{}", req.ros_distro, shell_ext);
-        send_status(&tx, "CONFIGURE_ROS_SHELL", "Configurando source de ROS 2 en la shell...", StepStatus::Running, 30).await;
+        send_status(
+            &tx,
+            "CONFIGURE_ROS_SHELL",
+            "Configurando source de ROS 2 en la shell...",
+            StepStatus::Running,
+            30,
+        )
+        .await;
 
         let mut updated_source = false;
         for line in file_lines.iter_mut() {
-            if line.contains("source /opt/ros/") && (line.ends_with("/setup.bash") || line.ends_with("/setup.zsh") || line.ends_with("/setup.sh")) {
+            if line.contains("source /opt/ros/")
+                && (line.ends_with("/setup.bash")
+                    || line.ends_with("/setup.zsh")
+                    || line.ends_with("/setup.sh"))
+            {
                 *line = source_line.clone();
                 updated_source = true;
                 break;
@@ -417,7 +493,14 @@ async fn run_configure_environment_workflow(
 
     // 3. Configure ROS_DOMAIN_ID, alias, and firewall
     if req.config_domain_id {
-        send_status(&tx, "CONFIGURE_DOMAIN", &format!("Configurando ROS_DOMAIN_ID a {}...", req.domain_id), StepStatus::Running, 60).await;
+        send_status(
+            &tx,
+            "CONFIGURE_DOMAIN",
+            &format!("Configurando ROS_DOMAIN_ID a {}...", req.domain_id),
+            StepStatus::Running,
+            60,
+        )
+        .await;
 
         let port_base = 7400 + 250 * req.domain_id;
         let multicast_port = port_base;
@@ -453,8 +536,20 @@ async fn run_configure_environment_workflow(
             }
         }
 
-        send_status(&tx, "CONFIGURE_FIREWALL", "Abriendo puertos del firewall (UFW) para ROS_DOMAIN_ID...", StepStatus::Running, 80).await;
-        for port in &[multicast_port, data_multicast_port, unicast_port, data_unicast_port] {
+        send_status(
+            &tx,
+            "CONFIGURE_FIREWALL",
+            "Abriendo puertos del firewall (UFW) para ROS_DOMAIN_ID...",
+            StepStatus::Running,
+            80,
+        )
+        .await;
+        for port in &[
+            multicast_port,
+            data_multicast_port,
+            unicast_port,
+            data_unicast_port,
+        ] {
             let _ = Command::new("pkexec")
                 .args(&["ufw", "allow", &format!("{}/udp", port)])
                 .stdout(std::process::Stdio::null())
@@ -466,6 +561,13 @@ async fn run_configure_environment_workflow(
 
     std::fs::write(&config_path, file_lines.join("\n") + "\n")?;
 
-    send_status(&tx, "CONFIGURE_SUCCESS", "Configuración completada con éxito.", StepStatus::Success, 100).await;
+    send_status(
+        &tx,
+        "CONFIGURE_SUCCESS",
+        "Configuración completada con éxito.",
+        StepStatus::Success,
+        100,
+    )
+    .await;
     Ok(())
 }

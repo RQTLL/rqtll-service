@@ -1,28 +1,28 @@
-use std::path::{Path, PathBuf};
-use std::time::SystemTime;
-use std::collections::HashMap;
-use tonic::{Request, Response, Status};
+use crate::utils::fs::expand_home_dir;
 use rqtll_api::rqtll::api::v1::file_service_server::FileService;
 use rqtll_api::rqtll::api::v1::{
-    PathRequest, ListFilesResponse, FileInfo, ReadFileRequest, FileContent, WriteFileRequest, RenameRequest, Status as ApiStatus
+    FileContent, FileInfo, ListFilesResponse, PathRequest, ReadFileRequest, RenameRequest,
+    Status as ApiStatus, WriteFileRequest,
 };
-use crate::utils::fs::expand_home_dir;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::time::SystemTime;
+use tonic::{Request, Response, Status};
 
 #[derive(Debug, Default)]
 pub struct MyFileService;
 
 #[tonic::async_trait]
 impl FileService for MyFileService {
-    async fn list(
-        &self,
-        req: Request<PathRequest>,
-    ) -> Result<Response<ListFilesResponse>, Status> {
+    async fn list(&self, req: Request<PathRequest>) -> Result<Response<ListFilesResponse>, Status> {
         let req = req.into_inner();
         let path_str = expand_home_dir(&req.path);
         let path = PathBuf::from(&path_str);
 
         if !path.exists() {
-            return Err(Status::not_found(format!("Path does not exist: {path_str}")));
+            return Err(Status::not_found(format!(
+                "Path does not exist: {path_str}"
+            )));
         }
 
         let mut entries = vec![];
@@ -33,17 +33,17 @@ impl FileService for MyFileService {
                         for entry in std::fs::read_dir(dir)? {
                             let entry = entry?;
                             let path = entry.path();
-                            
+
                             // Ignore common build/cache folders to keep it clean and fast
                             if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
                                 if name == ".git" || name == "__pycache__" {
                                     continue;
                                 }
                             }
-                            
+
                             let metadata = entry.metadata()?;
                             let mtime = metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH);
-                            
+
                             list.push(FileInfo {
                                 path: path.to_string_lossy().to_string(),
                                 is_dir: path.is_dir(),
@@ -52,7 +52,7 @@ impl FileService for MyFileService {
                                 metadata: std::collections::HashMap::new(),
                                 git_status: 0,
                             });
-                            
+
                             if path.is_dir() {
                                 let _ = visit_dirs(&path, list);
                             }
@@ -125,7 +125,7 @@ impl FileService for MyFileService {
         match std::fs::read(&path) {
             Ok(content) => {
                 let is_binary = content.iter().take(8000).any(|&b| b == 0);
-                
+
                 Ok(Response::new(FileContent {
                     content,
                     encoding: "utf-8".to_string(),
@@ -138,19 +138,17 @@ impl FileService for MyFileService {
                     }),
                 }))
             }
-            Err(e) => {
-                Ok(Response::new(FileContent {
-                    content: vec![],
-                    encoding: String::new(),
-                    is_binary: false,
-                    status: Some(ApiStatus {
-                        ok: false,
-                        code: 13,
-                        message: format!("Error reading file: {}", e),
-                        details: HashMap::new(),
-                    }),
-                }))
-            }
+            Err(e) => Ok(Response::new(FileContent {
+                content: vec![],
+                encoding: String::new(),
+                is_binary: false,
+                status: Some(ApiStatus {
+                    ok: false,
+                    code: 13,
+                    message: format!("Error reading file: {}", e),
+                    details: HashMap::new(),
+                }),
+            })),
         }
     }
 
@@ -173,22 +171,18 @@ impl FileService for MyFileService {
         }
 
         match std::fs::write(&path, &req.content) {
-            Ok(_) => {
-                Ok(Response::new(ApiStatus {
-                    ok: true,
-                    code: 0,
-                    message: "File written successfully".to_string(),
-                    details: HashMap::new(),
-                }))
-            }
-            Err(e) => {
-                Ok(Response::new(ApiStatus {
-                    ok: false,
-                    code: 13,
-                    message: format!("Error writing file: {}", e),
-                    details: HashMap::new(),
-                }))
-            }
+            Ok(_) => Ok(Response::new(ApiStatus {
+                ok: true,
+                code: 0,
+                message: "File written successfully".to_string(),
+                details: HashMap::new(),
+            })),
+            Err(e) => Ok(Response::new(ApiStatus {
+                ok: false,
+                code: 13,
+                message: format!("Error writing file: {}", e),
+                details: HashMap::new(),
+            })),
         }
     }
 
@@ -200,9 +194,14 @@ impl FileService for MyFileService {
         Err(Status::unimplemented("Not implemented"))
     }
 
-    type WatchStream = tokio_stream::wrappers::ReceiverStream<Result<rqtll_api::rqtll::api::v1::FileEvent, Status>>;
+    type WatchStream = tokio_stream::wrappers::ReceiverStream<
+        Result<rqtll_api::rqtll::api::v1::FileEvent, Status>,
+    >;
 
-    async fn watch(&self, _req: Request<PathRequest>) -> Result<Response<Self::WatchStream>, Status> {
+    async fn watch(
+        &self,
+        _req: Request<PathRequest>,
+    ) -> Result<Response<Self::WatchStream>, Status> {
         Err(Status::unimplemented("Not implemented"))
     }
 }

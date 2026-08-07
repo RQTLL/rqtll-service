@@ -180,7 +180,9 @@ impl CloneWorkspaceService for MyCloneWorkspaceService {
                 Ok(_) => {
                     let _ = tx
                         .send(Ok(CloneWorkspaceProgress {
-                            log_line: "URL inválida o inaccesible. Verifica la dirección del repositorio.".to_string(),
+                            log_line:
+                                "URL inválida o inaccesible. Verifica la dirección del repositorio."
+                                    .to_string(),
                             progress: 0.0,
                             completed: true,
                             success: false,
@@ -355,7 +357,9 @@ mod tests {
     #[test]
     fn test_extract_progress() {
         assert_eq!(
-            extract_progress("Recibiendo objetos: 100% (4704/4704), 439.45 MiB | 7.03 MiB/s, listo."),
+            extract_progress(
+                "Recibiendo objetos: 100% (4704/4704), 439.45 MiB | 7.03 MiB/s, listo."
+            ),
             100.0
         );
         assert_eq!(
@@ -367,12 +371,11 @@ mod tests {
             10.0
         );
         assert_eq!(
-            extract_progress("remote: Total 4704 (delta 15), reused 13 (delta 13), pack-reused 4676 (from 1)"),
+            extract_progress(
+                "remote: Total 4704 (delta 15), reused 13 (delta 13), pack-reused 4676 (from 1)"
+            ),
             0.0
         );
-        assert_eq!(
-            extract_progress("Clonando en 'mi-proyecto'..."),
-            0.0
-        );
+        assert_eq!(extract_progress("Clonando en 'mi-proyecto'..."), 0.0);
     }
 }

@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
-use tokio::sync::mpsc;
 use tokio::io::AsyncReadExt;
+use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 
 use rqtll_api::rqtll::api::v1::execution_service_server::ExecutionService;
 use rqtll_api::rqtll::api::v1::{
-    RunRequest, StopRequest, ExecEvent, LaunchListResponse, Status as ApiStatus,
-    LogEntry, LogLevel, Empty,
+    Empty, ExecEvent, LaunchListResponse, LogEntry, LogLevel, RunRequest, Status as ApiStatus,
+    StopRequest,
 };
 
 use crate::services::workspace::ACTIVE_WORKSPACE;
@@ -20,14 +20,12 @@ pub struct MyExecutionService;
 impl ExecutionService for MyExecutionService {
     type RunStream = ReceiverStream<Result<ExecEvent, Status>>;
 
-    async fn run(
-        &self,
-        req: Request<RunRequest>,
-    ) -> Result<Response<Self::RunStream>, Status> {
+    async fn run(&self, req: Request<RunRequest>) -> Result<Response<Self::RunStream>, Status> {
         let req = req.into_inner();
         let ws_path = {
             if let Ok(lock) = ACTIVE_WORKSPACE.lock() {
-                lock.clone().unwrap_or_else(|| "/home/akey/Proyectos/rqtll".to_string())
+                lock.clone()
+                    .unwrap_or_else(|| "/home/akey/Proyectos/rqtll".to_string())
             } else {
                 "/home/akey/Proyectos/rqtll".to_string()
             }
@@ -48,13 +46,13 @@ impl ExecutionService for MyExecutionService {
         if setup_path.exists() {
             source_parts.push(format!("source {}", setup_path.to_string_lossy()));
         }
-        
+
         let run_cmd = if req.use_launch {
             format!("ros2 launch {} {}", req.package, req.launch_file)
         } else {
             format!("ros2 run {} {}", req.package, req.executable)
         };
-        
+
         let cmd_str = if source_parts.is_empty() {
             run_cmd
         } else {
@@ -69,8 +67,14 @@ impl ExecutionService for MyExecutionService {
             .spawn()
             .map_err(|e| Status::internal(format!("Failed to run node/launcher: {e}")))?;
 
-        let stdout = child.stdout.take().ok_or_else(|| Status::internal("Failed to open stdout"))?;
-        let stderr = child.stderr.take().ok_or_else(|| Status::internal("Failed to open stderr"))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| Status::internal("Failed to open stdout"))?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| Status::internal("Failed to open stderr"))?;
 
         let (tx, rx) = mpsc::channel(64);
         let pid = child.id();
@@ -141,12 +145,19 @@ impl ExecutionService for MyExecutionService {
                 Err(_) => false,
             };
             let final_event = ExecEvent {
-                ev: Some(rqtll_api::rqtll::api::v1::exec_event::Ev::Status(ApiStatus {
-                    ok: success,
-                    code: if success { 0 } else { 2 },
-                    message: if success { "Process exited successfully" } else { "Process stopped" }.to_string(),
-                    details: HashMap::new(),
-                })),
+                ev: Some(rqtll_api::rqtll::api::v1::exec_event::Ev::Status(
+                    ApiStatus {
+                        ok: success,
+                        code: if success { 0 } else { 2 },
+                        message: if success {
+                            "Process exited successfully"
+                        } else {
+                            "Process stopped"
+                        }
+                        .to_string(),
+                        details: HashMap::new(),
+                    },
+                )),
             };
             let _ = tx.send(Ok(final_event)).await;
         });
@@ -154,10 +165,7 @@ impl ExecutionService for MyExecutionService {
         Ok(Response::new(ReceiverStream::new(rx)))
     }
 
-    async fn stop(
-        &self,
-        _req: Request<StopRequest>,
-    ) -> Result<Response<ApiStatus>, Status> {
+    async fn stop(&self, _req: Request<StopRequest>) -> Result<Response<ApiStatus>, Status> {
         Ok(Response::new(ApiStatus {
             ok: true,
             code: 0,

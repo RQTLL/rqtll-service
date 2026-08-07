@@ -1,23 +1,23 @@
-use std::collections::HashMap;
-use tonic::{Request, Response, Status};
 use rqtll_api::rqtll::api::v1::system_utils_server::SystemUtils;
 use rqtll_api::rqtll::api::v1::{
-    Empty, Status as ApiStatus, CommandRequest, CommandOutput, SshConfig, SshSession, RemoteExecRequest,
-    AvailableLibrariesResponse
+    AvailableLibrariesResponse, CommandOutput, CommandRequest, Empty, RemoteExecRequest, SshConfig,
+    SshSession, Status as ApiStatus,
 };
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+use tonic::{Request, Response, Status};
 
 fn scan_python_libraries() -> Vec<String> {
     let mut libs = Vec::new();
     let home = std::env::var("HOME").unwrap_or_default();
-    
+
     let search_roots = vec![
         PathBuf::from("/usr/lib"),
         PathBuf::from("/usr/local/lib"),
         PathBuf::from(format!("{}/.local/lib", home)),
     ];
-    
+
     for root in search_roots {
         if let Ok(entries) = fs::read_dir(&root) {
             for entry in entries.flatten() {
@@ -25,12 +25,15 @@ fn scan_python_libraries() -> Vec<String> {
                 if name.starts_with("python") {
                     let py_dir = entry.path().join("dist-packages");
                     let py_dir_site = entry.path().join("site-packages");
-                    
+
                     for sub_dir in &[py_dir, py_dir_site] {
                         if let Ok(sub_entries) = fs::read_dir(sub_dir) {
                             for sub_entry in sub_entries.flatten() {
                                 let sub_name = sub_entry.file_name().to_string_lossy().into_owned();
-                                if !sub_name.starts_with('_') && !sub_name.contains('.') && !sub_name.contains('-') {
+                                if !sub_name.starts_with('_')
+                                    && !sub_name.contains('.')
+                                    && !sub_name.contains('-')
+                                {
                                     libs.push(sub_name);
                                 } else if sub_name.ends_with(".py") && !sub_name.starts_with('_') {
                                     libs.push(sub_name.trim_end_matches(".py").to_string());
@@ -42,7 +45,7 @@ fn scan_python_libraries() -> Vec<String> {
             }
         }
     }
-    
+
     libs.sort();
     libs.dedup();
     libs
@@ -54,7 +57,7 @@ fn scan_cpp_libraries() -> Vec<String> {
         PathBuf::from("/usr/include"),
         PathBuf::from("/usr/local/include"),
     ];
-    
+
     for root in search_roots {
         if let Ok(entries) = fs::read_dir(&root) {
             for entry in entries.flatten() {
@@ -70,7 +73,7 @@ fn scan_cpp_libraries() -> Vec<String> {
             }
         }
     }
-    
+
     libs.sort();
     libs.dedup();
     libs
@@ -83,7 +86,7 @@ fn scan_arduino_libraries() -> Vec<String> {
         PathBuf::from(format!("{}/.arduino15/packages", home)),
         PathBuf::from(format!("{}/Arduino/libraries", home)),
     ];
-    
+
     for root in search_roots {
         if let Ok(entries) = fs::read_dir(&root) {
             for entry in entries.flatten() {
@@ -94,7 +97,7 @@ fn scan_arduino_libraries() -> Vec<String> {
             }
         }
     }
-    
+
     libs.sort();
     libs.dedup();
     libs
@@ -105,10 +108,7 @@ pub struct MySystemUtilsService;
 
 #[tonic::async_trait]
 impl SystemUtils for MySystemUtilsService {
-    async fn restart_daemon(
-        &self,
-        _req: Request<Empty>,
-    ) -> Result<Response<ApiStatus>, Status> {
+    async fn restart_daemon(&self, _req: Request<Empty>) -> Result<Response<ApiStatus>, Status> {
         let mut stop_cmd = crate::utils::apt::create_ros2_command("", &["daemon", "stop"]).await;
         let stop_out = stop_cmd.output().await;
 
@@ -125,22 +125,18 @@ impl SystemUtils for MySystemUtilsService {
         let start_out = start_cmd.output().await;
 
         match start_out {
-            Ok(_) => {
-                Ok(Response::new(ApiStatus {
-                    ok: true,
-                    code: 0,
-                    message: "ROS2 daemon restarted successfully".to_string(),
-                    details: HashMap::new(),
-                }))
-            }
-            Err(e) => {
-                Ok(Response::new(ApiStatus {
-                    ok: false,
-                    code: 13,
-                    message: format!("Failed to start ROS2 daemon: {}", e),
-                    details: HashMap::new(),
-                }))
-            }
+            Ok(_) => Ok(Response::new(ApiStatus {
+                ok: true,
+                code: 0,
+                message: "ROS2 daemon restarted successfully".to_string(),
+                details: HashMap::new(),
+            })),
+            Err(e) => Ok(Response::new(ApiStatus {
+                ok: false,
+                code: 13,
+                message: format!("Failed to start ROS2 daemon: {}", e),
+                details: HashMap::new(),
+            })),
         }
     }
 
@@ -174,7 +170,7 @@ impl SystemUtils for MySystemUtilsService {
         let python_libraries = scan_python_libraries();
         let cpp_libraries = scan_cpp_libraries();
         let arduino_libraries = scan_arduino_libraries();
-        
+
         Ok(Response::new(AvailableLibrariesResponse {
             python_libraries,
             cpp_libraries,

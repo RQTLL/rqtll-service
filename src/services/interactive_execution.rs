@@ -1,20 +1,20 @@
 use std::collections::HashMap;
+use std::process::Stdio;
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
-use tokio::sync::Mutex;
-use tokio::process::{Child, Command};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::process::{Child, Command};
 use tokio::sync::mpsc;
+use tokio::sync::Mutex;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
-use std::process::Stdio;
 
 use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
 
 use rqtll_api::rqtll::api::v1::command_execution_service_server::CommandExecutionService;
 use rqtll_api::rqtll::api::v1::{
-    ExecutionRequest, ExecutionOutput, ExecutionInput, ExecutionResize,
-    ExecutionControl, ExecutionStatus, Status as ApiStatus, ActiveSessionsResponse, Empty,
+    ActiveSessionsResponse, Empty, ExecutionControl, ExecutionInput, ExecutionOutput,
+    ExecutionRequest, ExecutionResize, ExecutionStatus, Status as ApiStatus,
 };
 
 enum SessionProcess {
@@ -81,7 +81,7 @@ impl CommandExecutionService for MyCommandExecutionService {
     ) -> Result<Response<Self::StartSessionStream>, Status> {
         let req_raw = req.into_inner();
         let session_id = req_raw.session_id.clone();
-        
+
         // Reattach to existing session if it is already running
         {
             let sessions = self.sessions.lock().await;
@@ -94,7 +94,10 @@ impl CommandExecutionService for MyCommandExecutionService {
             }
         }
 
-        let payload = req_raw.payload.clone().ok_or_else(|| Status::invalid_argument("Missing request payload"))?;
+        let payload = req_raw
+            .payload
+            .clone()
+            .ok_or_else(|| Status::invalid_argument("Missing request payload"))?;
 
         let (cmd_bin, cmd_args, process_type) = match payload {
             rqtll_api::rqtll::api::v1::execution_request::Payload::Rviz2(rviz2) => {
@@ -247,7 +250,7 @@ impl CommandExecutionService for MyCommandExecutionService {
             rqtll_api::rqtll::api::v1::execution_request::Payload::Ssh(ssh) => {
                 let mut args = Vec::new();
                 let use_password = !ssh.password.is_empty();
-                
+
                 if use_password {
                     args.push("-p".to_string());
                     args.push(ssh.password);
@@ -283,11 +286,15 @@ impl CommandExecutionService for MyCommandExecutionService {
                 if ssh.ipv6_only {
                     args.push("-6".to_string());
                 }
-                
+
                 args.push("--".to_string());
                 args.push(ssh.server);
 
-                let bin = if use_password { "sshpass".to_string() } else { "ssh".to_string() };
+                let bin = if use_password {
+                    "sshpass".to_string()
+                } else {
+                    "ssh".to_string()
+                };
                 (bin, args, "ssh".to_string())
             }
         };
@@ -299,12 +306,14 @@ impl CommandExecutionService for MyCommandExecutionService {
 
         if use_pty {
             let pty_system = NativePtySystem::default();
-            let pair = pty_system.openpty(PtySize {
-                rows: 24,
-                cols: 80,
-                pixel_width: 0,
-                pixel_height: 0,
-            }).map_err(|e| Status::internal(format!("Failed to open PTY: {e}")))?;
+            let pair = pty_system
+                .openpty(PtySize {
+                    rows: 24,
+                    cols: 80,
+                    pixel_width: 0,
+                    pixel_height: 0,
+                })
+                .map_err(|e| Status::internal(format!("Failed to open PTY: {e}")))?;
 
             let mut cmd = CommandBuilder::new(&cmd_bin);
             cmd.args(&cmd_args);
@@ -313,18 +322,22 @@ impl CommandExecutionService for MyCommandExecutionService {
                     cmd.cwd(std::path::PathBuf::from(ws_path));
                 }
             }
-            
-            let child = pair.slave.spawn_command(cmd)
-                .map_err(|e| {
-                    let msg = format!("No se pudo iniciar la sesión {session_id} ({process_type}): {e}");
-                    send_system_notification("Error al Iniciar", &msg);
-                    Status::internal(msg)
-                })?;
+
+            let child = pair.slave.spawn_command(cmd).map_err(|e| {
+                let msg =
+                    format!("No se pudo iniciar la sesión {session_id} ({process_type}): {e}");
+                send_system_notification("Error al Iniciar", &msg);
+                Status::internal(msg)
+            })?;
 
             let child_arc = Arc::new(Mutex::new(child));
-            let mut reader = pair.master.try_clone_reader()
+            let mut reader = pair
+                .master
+                .try_clone_reader()
                 .map_err(|e| Status::internal(format!("Failed to clone PTY reader: {e}")))?;
-            let writer = pair.master.take_writer()
+            let writer = pair
+                .master
+                .take_writer()
                 .map_err(|e| Status::internal(format!("Failed to take PTY writer: {e}")))?;
             let master_arc = Arc::new(Mutex::new(pair.master));
 
@@ -366,7 +379,7 @@ impl CommandExecutionService for MyCommandExecutionService {
                         timestamp: Some(prost_types::Timestamp::from(std::time::SystemTime::now())),
                         is_stderr: false,
                     };
-                    
+
                     let list = {
                         if let Ok(guard) = senders_stdout.lock() {
                             guard.clone()
@@ -375,7 +388,8 @@ impl CommandExecutionService for MyCommandExecutionService {
                         }
                     };
                     for tx in list {
-                        let _ = tokio::runtime::Handle::current().block_on(tx.send(Ok(out.clone())));
+                        let _ =
+                            tokio::runtime::Handle::current().block_on(tx.send(Ok(out.clone())));
                     }
                     if let Ok(mut guard) = senders_stdout.lock() {
                         guard.retain(|tx| !tx.is_closed());
@@ -401,7 +415,7 @@ impl CommandExecutionService for MyCommandExecutionService {
                         }
                     }
                 }
-                
+
                 let mut map = sessions_map.lock().await;
                 map.remove(&session_id_wait);
             });
@@ -412,7 +426,8 @@ impl CommandExecutionService for MyCommandExecutionService {
         // Spawn child process (standard command)
         let mut command = Command::new(&cmd_bin);
         command.args(&cmd_args);
-        command.env("RCUTILS_COLORIZED_OUTPUT", "1")
+        command
+            .env("RCUTILS_COLORIZED_OUTPUT", "1")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -421,11 +436,11 @@ impl CommandExecutionService for MyCommandExecutionService {
                 command.current_dir(ws_path);
             }
         }
-        let child = match command.spawn() 
-        {
+        let child = match command.spawn() {
             Ok(c) => c,
             Err(e) => {
-                let msg = format!("No se pudo iniciar la sesión {session_id} ({process_type}): {e}");
+                let msg =
+                    format!("No se pudo iniciar la sesión {session_id} ({process_type}): {e}");
                 send_system_notification("Error al Iniciar", &msg);
                 return Err(Status::internal(msg));
             }
@@ -433,8 +448,14 @@ impl CommandExecutionService for MyCommandExecutionService {
 
         let mut child_nonmut = child;
         let child_stdin = child_nonmut.stdin.take().map(|s| Arc::new(Mutex::new(s)));
-        let child_stdout = child_nonmut.stdout.take().ok_or_else(|| Status::internal("Failed to open stdout"))?;
-        let child_stderr = child_nonmut.stderr.take().ok_or_else(|| Status::internal("Failed to open stderr"))?;
+        let child_stdout = child_nonmut
+            .stdout
+            .take()
+            .ok_or_else(|| Status::internal("Failed to open stdout"))?;
+        let child_stderr = child_nonmut
+            .stderr
+            .take()
+            .ok_or_else(|| Status::internal("Failed to open stderr"))?;
 
         let session_id_clone = session_id.clone();
         let child_arc = Arc::new(Mutex::new(child_nonmut));
@@ -477,7 +498,7 @@ impl CommandExecutionService for MyCommandExecutionService {
                     timestamp: Some(prost_types::Timestamp::from(std::time::SystemTime::now())),
                     is_stderr: false,
                 };
-                
+
                 let list = {
                     if let Ok(guard) = senders_stdout.lock() {
                         guard.clone()
@@ -510,7 +531,7 @@ impl CommandExecutionService for MyCommandExecutionService {
                     timestamp: Some(prost_types::Timestamp::from(std::time::SystemTime::now())),
                     is_stderr: true,
                 };
-                
+
                 let list = {
                     if let Ok(guard) = senders_stderr.lock() {
                         guard.clone()
@@ -545,7 +566,7 @@ impl CommandExecutionService for MyCommandExecutionService {
                     }
                 }
             }
-            
+
             let mut map = sessions_map.lock().await;
             map.remove(&session_id_wait);
         });
@@ -559,7 +580,7 @@ impl CommandExecutionService for MyCommandExecutionService {
     ) -> Result<Response<ApiStatus>, Status> {
         let input = req.into_inner();
         let sessions = self.sessions.lock().await;
-        
+
         if let Some(session) = sessions.get(&input.session_id) {
             // Security check for SSH terminal inputs
             if session.process_type == "ssh" {
@@ -579,7 +600,10 @@ impl CommandExecutionService for MyCommandExecutionService {
                                 buf_lock.clear();
                                 // Send Ctrl+C (ASCII 3) to cancel line
                                 match &session.process {
-                                    SessionProcess::Standard { stdin: Some(stdin_mutex), .. } => {
+                                    SessionProcess::Standard {
+                                        stdin: Some(stdin_mutex),
+                                        ..
+                                    } => {
                                         let mut stdin = stdin_mutex.lock().await;
                                         let _ = stdin.write_all(&[3]).await;
                                         let _ = stdin.flush().await;
@@ -591,12 +615,14 @@ impl CommandExecutionService for MyCommandExecutionService {
                                                 let _ = w.write_all(&[3]);
                                                 let _ = w.flush();
                                             }
-                                        }).await.map_err(|e| Status::internal(e.to_string()))?;
+                                        })
+                                        .await
+                                        .map_err(|e| Status::internal(e.to_string()))?;
                                     }
                                     _ => {}
                                 }
                                 return Err(Status::permission_denied(
-                                    "Comando bloqueado por motivos de seguridad."
+                                    "Comando bloqueado por motivos de seguridad.",
                                 ));
                             }
                             buf_lock.clear();
@@ -610,11 +636,15 @@ impl CommandExecutionService for MyCommandExecutionService {
             }
 
             match &session.process {
-                SessionProcess::Standard { stdin: Some(stdin_mutex), .. } => {
+                SessionProcess::Standard {
+                    stdin: Some(stdin_mutex),
+                    ..
+                } => {
                     let mut stdin = stdin_mutex.lock().await;
-                    stdin.write_all(&input.data).await.map_err(|e| {
-                        Status::internal(format!("Failed to write to stdin: {e}"))
-                    })?;
+                    stdin
+                        .write_all(&input.data)
+                        .await
+                        .map_err(|e| Status::internal(format!("Failed to write to stdin: {e}")))?;
                     let _ = stdin.flush().await;
                 }
                 SessionProcess::Pty { writer, .. } => {
@@ -625,7 +655,9 @@ impl CommandExecutionService for MyCommandExecutionService {
                             let _ = w.write_all(&data);
                             let _ = w.flush();
                         }
-                    }).await.map_err(|e| Status::internal(e.to_string()))?;
+                    })
+                    .await
+                    .map_err(|e| Status::internal(e.to_string()))?;
                 }
                 _ => {}
             }
@@ -647,7 +679,7 @@ impl CommandExecutionService for MyCommandExecutionService {
     ) -> Result<Response<ApiStatus>, Status> {
         let req = req.into_inner();
         let sessions = self.sessions.lock().await;
-        
+
         if let Some(session) = sessions.get(&req.session_id) {
             if let Some(ref master_mutex) = session.master {
                 let master = master_mutex.lock().await;
@@ -666,7 +698,9 @@ impl CommandExecutionService for MyCommandExecutionService {
             }
         }
 
-        Err(Status::not_found("Session not found or PTY master not available"))
+        Err(Status::not_found(
+            "Session not found or PTY master not available",
+        ))
     }
 
     async fn control_session(
@@ -675,11 +709,11 @@ impl CommandExecutionService for MyCommandExecutionService {
     ) -> Result<Response<ExecutionStatus>, Status> {
         let req = req.into_inner();
         let sessions = self.sessions.lock().await;
-        
+
         if let Some(session) = sessions.get(&req.session_id) {
             match req.action() {
-                rqtll_api::rqtll::api::v1::execution_control::Action::Stop |
-                rqtll_api::rqtll::api::v1::execution_control::Action::ForceStop => {
+                rqtll_api::rqtll::api::v1::execution_control::Action::Stop
+                | rqtll_api::rqtll::api::v1::execution_control::Action::ForceStop => {
                     let exit_code = match &session.process {
                         SessionProcess::Standard { child, .. } => {
                             let mut c = child.lock().await;
@@ -707,7 +741,9 @@ impl CommandExecutionService for MyCommandExecutionService {
                     }));
                 }
                 rqtll_api::rqtll::api::v1::execution_control::Action::Restart => {
-                    return Err(Status::unimplemented("Restart is not directly supported via control"));
+                    return Err(Status::unimplemented(
+                        "Restart is not directly supported via control",
+                    ));
                 }
             }
         }
@@ -730,10 +766,8 @@ impl CommandExecutionService for MyCommandExecutionService {
         _req: Request<Empty>,
     ) -> Result<Response<ActiveSessionsResponse>, Status> {
         let sessions = self.sessions.lock().await;
-        let active_requests = sessions.values()
-            .map(|s| s.request.clone())
-            .collect();
-        
+        let active_requests = sessions.values().map(|s| s.request.clone()).collect();
+
         Ok(Response::new(ActiveSessionsResponse {
             sessions: active_requests,
         }))

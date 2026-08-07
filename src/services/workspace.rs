@@ -56,7 +56,11 @@ pub fn scan_packages_in_workspace(ws_path: &str) -> Vec<WorkspacePackageInfo> {
                     if path.is_dir() {
                         let pkg_xml = path.join("package.xml");
                         if pkg_xml.exists() {
-                            let pkg_name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                            let pkg_name = path
+                                .file_name()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                                .to_string();
                             list.push(WorkspacePackageInfo {
                                 name: pkg_name,
                                 path: path.to_string_lossy().to_string(),
@@ -82,7 +86,7 @@ impl WorkspaceService for MyWorkspaceService {
     ) -> Result<Response<OpenWorkspaceResponse>, Status> {
         let req = req.into_inner();
         let path = expand_home_dir(&req.path);
-        
+
         let packages = scan_packages_in_workspace(&path);
 
         if let Ok(mut lock) = ACTIVE_WORKSPACE.lock() {
@@ -110,7 +114,8 @@ impl WorkspaceService for MyWorkspaceService {
         let path = if !req.workspace_path.is_empty() {
             expand_home_dir(&req.workspace_path)
         } else if let Ok(lock) = ACTIVE_WORKSPACE.lock() {
-            lock.clone().unwrap_or_else(|| "/home/akey/Proyectos/rqtll".to_string())
+            lock.clone()
+                .unwrap_or_else(|| "/home/akey/Proyectos/rqtll".to_string())
         } else {
             "/home/akey/Proyectos/rqtll".to_string()
         };
@@ -141,7 +146,10 @@ impl WorkspaceService for MyWorkspaceService {
             Ok(_) => Ok(Response::new(rqtll_api::rqtll::api::v1::Status {
                 ok: true,
                 code: 0,
-                message: format!("Workspace and src directory created successfully at {:?}", src_path),
+                message: format!(
+                    "Workspace and src directory created successfully at {:?}",
+                    src_path
+                ),
                 details: std::collections::HashMap::new(),
             })),
             Err(e) => Ok(Response::new(rqtll_api::rqtll::api::v1::Status {
@@ -159,11 +167,7 @@ impl WorkspaceService for MyWorkspaceService {
     ) -> Result<Response<rqtll_api::rqtll::api::v1::Status>, Status> {
         let req = req.into_inner();
 
-        let mut args = vec![
-            "pkg".to_string(),
-            "create".to_string(),
-            req.name.clone(),
-        ];
+        let mut args = vec!["pkg".to_string(), "create".to_string(), req.name.clone()];
 
         if !req.build_type.is_empty() {
             args.push("--build-type".to_string());
@@ -207,7 +211,10 @@ impl WorkspaceService for MyWorkspaceService {
         }
 
         if let Some(deps_str) = req.options.get("dependencies") {
-            let deps: Vec<&str> = deps_str.split_whitespace().filter(|s| !s.is_empty()).collect();
+            let deps: Vec<&str> = deps_str
+                .split_whitespace()
+                .filter(|s| !s.is_empty())
+                .collect();
             if !deps.is_empty() {
                 args.push("--dependencies".to_string());
                 for dep in deps {
@@ -238,7 +245,10 @@ impl WorkspaceService for MyWorkspaceService {
                         expand_home_dir(dest)
                     } else {
                         let expanded_ws = expand_home_dir(&req.workspace_path);
-                        PathBuf::from(expanded_ws).join("src").to_string_lossy().to_string()
+                        PathBuf::from(expanded_ws)
+                            .join("src")
+                            .to_string_lossy()
+                            .to_string()
                     };
                     let pkg_dir = PathBuf::from(dest_dir).join(&req.name);
 
@@ -249,7 +259,10 @@ impl WorkspaceService for MyWorkspaceService {
                             let pkg_xml_path = pkg_dir.join("package.xml");
                             if pkg_xml_path.exists() {
                                 if let Ok(mut content) = std::fs::read_to_string(&pkg_xml_path) {
-                                    content = content.replace("<version>0.0.0</version>", &format!("<version>{}</version>", version));
+                                    content = content.replace(
+                                        "<version>0.0.0</version>",
+                                        &format!("<version>{}</version>", version),
+                                    );
                                     let _ = std::fs::write(&pkg_xml_path, content);
                                 }
                             }
@@ -258,7 +271,10 @@ impl WorkspaceService for MyWorkspaceService {
                             let setup_py_path = pkg_dir.join("setup.py");
                             if setup_py_path.exists() {
                                 if let Ok(mut content) = std::fs::read_to_string(&setup_py_path) {
-                                    content = content.replace("version='0.0.0',", &format!("version='{}',", version));
+                                    content = content.replace(
+                                        "version='0.0.0',",
+                                        &format!("version='{}',", version),
+                                    );
                                     let _ = std::fs::write(&setup_py_path, content);
                                 }
                             }
@@ -268,8 +284,10 @@ impl WorkspaceService for MyWorkspaceService {
                             if cmake_path.exists() {
                                 if let Ok(mut content) = std::fs::read_to_string(&cmake_path) {
                                     let default_project = format!("project({})", req.name);
-                                    let replacement_project = format!("project({} VERSION {})", req.name, version);
-                                    content = content.replace(&default_project, &replacement_project);
+                                    let replacement_project =
+                                        format!("project({} VERSION {})", req.name, version);
+                                    content =
+                                        content.replace(&default_project, &replacement_project);
                                     let _ = std::fs::write(&cmake_path, content);
                                 }
                             }
@@ -278,7 +296,10 @@ impl WorkspaceService for MyWorkspaceService {
                             let cargo_path = pkg_dir.join("Cargo.toml");
                             if cargo_path.exists() {
                                 if let Ok(mut content) = std::fs::read_to_string(&cargo_path) {
-                                    content = content.replace("version = \"0.0.1\"", &format!("version = \"{}\"", version));
+                                    content = content.replace(
+                                        "version = \"0.0.1\"",
+                                        &format!("version = \"{}\"", version),
+                                    );
                                     let _ = std::fs::write(&cargo_path, content);
                                 }
                             }
@@ -295,7 +316,10 @@ impl WorkspaceService for MyWorkspaceService {
                     Ok(Response::new(rqtll_api::rqtll::api::v1::Status {
                         ok: false,
                         code: 13, // INTERNAL
-                        message: format!("ros2 pkg create failed:\nstdout: {}\nstderr: {}", stdout, stderr),
+                        message: format!(
+                            "ros2 pkg create failed:\nstdout: {}\nstderr: {}",
+                            stdout, stderr
+                        ),
                         details: std::collections::HashMap::new(),
                     }))
                 }
@@ -353,11 +377,22 @@ impl WorkspaceService for MyWorkspaceService {
 
         // 1. Copy nodes
         for node in &req.nodes {
-            let node_base = node.strip_suffix(".py").or(node.strip_suffix(".cpp")).unwrap_or(node);
+            let node_base = node
+                .strip_suffix(".py")
+                .or(node.strip_suffix(".cpp"))
+                .unwrap_or(node);
             let template_name = if node.ends_with(".py") {
-                if node.contains("subscriber") { "minimal_subscriber.py" } else { "minimal_publisher.py" }
+                if node.contains("subscriber") {
+                    "minimal_subscriber.py"
+                } else {
+                    "minimal_publisher.py"
+                }
             } else if node.ends_with(".cpp") {
-                if node.contains("subscriber") { "minimal_subscriber.cpp" } else { "minimal_publisher.cpp" }
+                if node.contains("subscriber") {
+                    "minimal_subscriber.cpp"
+                } else {
+                    "minimal_publisher.cpp"
+                }
             } else {
                 continue;
             };
@@ -381,17 +416,47 @@ impl WorkspaceService for MyWorkspaceService {
             content = content.replace("class MinimalSubscriber", &format!("class {}", class_name));
 
             if node.ends_with(".py") {
-                content = content.replace("super().__init__('minimal_publisher')", &format!("super().__init__('{}')", node_base));
-                content = content.replace("super().__init__('minimal_subscriber')", &format!("super().__init__('{}')", node_base));
-                content = content.replace("minimal_publisher = MinimalPublisher()", &format!("{} = {}()", node_base, class_name));
-                content = content.replace("minimal_subscriber = MinimalSubscriber()", &format!("{} = {}()", node_base, class_name));
-                content = content.replace("rclpy.spin(minimal_publisher)", &format!("rclpy.spin({})", node_base));
-                content = content.replace("rclpy.spin(minimal_subscriber)", &format!("rclpy.spin({})", node_base));
+                content = content.replace(
+                    "super().__init__('minimal_publisher')",
+                    &format!("super().__init__('{}')", node_base),
+                );
+                content = content.replace(
+                    "super().__init__('minimal_subscriber')",
+                    &format!("super().__init__('{}')", node_base),
+                );
+                content = content.replace(
+                    "minimal_publisher = MinimalPublisher()",
+                    &format!("{} = {}()", node_base, class_name),
+                );
+                content = content.replace(
+                    "minimal_subscriber = MinimalSubscriber()",
+                    &format!("{} = {}()", node_base, class_name),
+                );
+                content = content.replace(
+                    "rclpy.spin(minimal_publisher)",
+                    &format!("rclpy.spin({})", node_base),
+                );
+                content = content.replace(
+                    "rclpy.spin(minimal_subscriber)",
+                    &format!("rclpy.spin({})", node_base),
+                );
             } else if node.ends_with(".cpp") {
-                content = content.replace(": Node(\"minimal_publisher\")", &format!(": Node(\"{}\")", node_base));
-                content = content.replace(": Node(\"minimal_subscriber\")", &format!(": Node(\"{}\")", node_base));
-                content = content.replace("std::make_shared<MinimalPublisher>()", &format!("std::make_shared<{}>()", class_name));
-                content = content.replace("std::make_shared<MinimalSubscriber>()", &format!("std::make_shared<{}>()", class_name));
+                content = content.replace(
+                    ": Node(\"minimal_publisher\")",
+                    &format!(": Node(\"{}\")", node_base),
+                );
+                content = content.replace(
+                    ": Node(\"minimal_subscriber\")",
+                    &format!(": Node(\"{}\")", node_base),
+                );
+                content = content.replace(
+                    "std::make_shared<MinimalPublisher>()",
+                    &format!("std::make_shared<{}>()", class_name),
+                );
+                content = content.replace(
+                    "std::make_shared<MinimalSubscriber>()",
+                    &format!("std::make_shared<{}>()", class_name),
+                );
             }
 
             let dest_file_path = if build_type == "ament_python" {
@@ -426,8 +491,14 @@ impl WorkspaceService for MyWorkspaceService {
                 }));
             }
 
-            let exec_name = req.nodes.first()
-                .map(|n| n.strip_suffix(".py").or(n.strip_suffix(".cpp")).unwrap_or(n))
+            let exec_name = req
+                .nodes
+                .first()
+                .map(|n| {
+                    n.strip_suffix(".py")
+                        .or(n.strip_suffix(".cpp"))
+                        .unwrap_or(n)
+                })
                 .unwrap_or("talker");
 
             for launcher in &req.launchers {
@@ -475,7 +546,7 @@ impl WorkspaceService for MyWorkspaceService {
             let setup_py_path = pkg_dir.join("setup.py");
             if setup_py_path.exists() {
                 let mut setup_content = std::fs::read_to_string(&setup_py_path).unwrap_or_default();
-                
+
                 if !setup_content.contains("import os") {
                     setup_content = format!("import os\nfrom glob import glob\n{}", setup_content);
                 } else if !setup_content.contains("from glob import glob") {
@@ -486,19 +557,28 @@ impl WorkspaceService for MyWorkspaceService {
                 if !setup_content.contains("share/launch") && !setup_content.contains("'launch'") {
                     setup_content = setup_content.replace(
                         "('share/' + package_name, ['package.xml']),",
-                        &format!("('share/' + package_name, ['package.xml']),{}", launch_entry)
+                        &format!(
+                            "('share/' + package_name, ['package.xml']),{}",
+                            launch_entry
+                        ),
                     );
                 }
 
                 let mut scripts = String::new();
                 for node in &req.nodes {
-                    let node_base = node.strip_suffix(".py").or(node.strip_suffix(".cpp")).unwrap_or(node);
-                    scripts.push_str(&format!("            '{} = {}.{}:main',\n", node_base, req.package_name, node_base));
+                    let node_base = node
+                        .strip_suffix(".py")
+                        .or(node.strip_suffix(".cpp"))
+                        .unwrap_or(node);
+                    scripts.push_str(&format!(
+                        "            '{} = {}.{}:main',\n",
+                        node_base, req.package_name, node_base
+                    ));
                 }
                 if !scripts.is_empty() {
                     setup_content = setup_content.replace(
                         "'console_scripts': [",
-                        &format!("'console_scripts': [\n{}", scripts)
+                        &format!("'console_scripts': [\n{}", scripts),
                     );
                 }
 
@@ -536,8 +616,12 @@ impl WorkspaceService for MyWorkspaceService {
                     if node.ends_with(".cpp") {
                         let node_base = node.strip_suffix(".cpp").unwrap_or(node);
                         execs.push(node_base.to_string());
-                        cmake_block.push_str(&format!("add_executable({} src/{})\n", node_base, node));
-                        cmake_block.push_str(&format!("ament_target_dependencies({} {})\n\n", node_base, deps_str));
+                        cmake_block
+                            .push_str(&format!("add_executable({} src/{})\n", node_base, node));
+                        cmake_block.push_str(&format!(
+                            "ament_target_dependencies({} {})\n\n",
+                            node_base, deps_str
+                        ));
                     }
                 }
 
@@ -551,11 +635,16 @@ impl WorkspaceService for MyWorkspaceService {
 
                 if !req.launchers.is_empty() {
                     cmake_block.push_str("# Install launch files\n");
-                    cmake_block.push_str("install(DIRECTORY launch\n  DESTINATION share/${PROJECT_NAME}\n)\n\n");
+                    cmake_block.push_str(
+                        "install(DIRECTORY launch\n  DESTINATION share/${PROJECT_NAME}\n)\n\n",
+                    );
                 }
 
                 if cmake_content.contains("ament_package()") {
-                    cmake_content = cmake_content.replace("ament_package()", &format!("{}ament_package()", cmake_block));
+                    cmake_content = cmake_content.replace(
+                        "ament_package()",
+                        &format!("{}ament_package()", cmake_block),
+                    );
                     if let Err(e) = std::fs::write(&cmake_path, cmake_content) {
                         return Ok(Response::new(rqtll_api::rqtll::api::v1::Status {
                             ok: false,

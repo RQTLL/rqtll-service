@@ -1,18 +1,15 @@
 use std::collections::HashMap;
+use tokio::io::AsyncBufReadExt;
+use tokio::io::AsyncReadExt;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
-use tokio::io::AsyncReadExt;
-use tokio::io::AsyncBufReadExt;
 
 use rqtll_api::rqtll::api::v1::data_stream_service_server::DataStreamService;
 use rqtll_api::rqtll::api::v1::{
-    SubscribeRequest, TopicMessage, PublishRequest,
-    RecordRequest, RecordEvent, PlayRequest, PlaybackEvent,
-    Status as ApiStatus, LogEntry, LogLevel,
+    LogEntry, LogLevel, PlayRequest, PlaybackEvent, PublishRequest, RecordEvent, RecordRequest,
+    Status as ApiStatus, SubscribeRequest, TopicMessage,
 };
-
-
 
 pub struct MyDataStreamService;
 
@@ -45,37 +42,54 @@ impl DataStreamService for MyDataStreamService {
         };
 
         if !is_image && !topic_name.is_empty() {
-            let mut info_cmd = crate::utils::apt::create_ros2_command(&ws_path, &["topic", "info", &topic_name]).await;
+            let mut info_cmd =
+                crate::utils::apt::create_ros2_command(&ws_path, &["topic", "info", &topic_name])
+                    .await;
             let info_out = info_cmd.output().await;
             let info_str = match info_out {
                 Ok(out) => String::from_utf8_lossy(&out.stdout).to_string(),
                 Err(e) => format!("Failed to get topic info: {e}"),
             };
 
-            let mut echo_cmd = crate::utils::apt::create_ros2_command(&ws_path, &["topic", "echo", &topic_name]).await;
+            let mut echo_cmd =
+                crate::utils::apt::create_ros2_command(&ws_path, &["topic", "echo", &topic_name])
+                    .await;
             let mut echo_child = echo_cmd
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::null())
                 .spawn()
                 .map_err(|e| Status::internal(format!("Failed to run ros2 topic echo: {e}")))?;
 
-            let mut bw_cmd = crate::utils::apt::create_ros2_command(&ws_path, &["topic", "bw", &topic_name]).await;
+            let mut bw_cmd =
+                crate::utils::apt::create_ros2_command(&ws_path, &["topic", "bw", &topic_name])
+                    .await;
             let mut bw_child = bw_cmd
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::null())
                 .spawn()
                 .map_err(|e| Status::internal(format!("Failed to run ros2 topic bw: {e}")))?;
 
-            let mut hz_cmd = crate::utils::apt::create_ros2_command(&ws_path, &["topic", "hz", &topic_name]).await;
+            let mut hz_cmd =
+                crate::utils::apt::create_ros2_command(&ws_path, &["topic", "hz", &topic_name])
+                    .await;
             let mut hz_child = hz_cmd
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::null())
                 .spawn()
                 .map_err(|e| Status::internal(format!("Failed to run ros2 topic hz: {e}")))?;
 
-            let echo_stdout = echo_child.stdout.take().ok_or_else(|| Status::internal("Failed to open echo stdout"))?;
-            let bw_stdout = bw_child.stdout.take().ok_or_else(|| Status::internal("Failed to open bw stdout"))?;
-            let hz_stdout = hz_child.stdout.take().ok_or_else(|| Status::internal("Failed to open hz stdout"))?;
+            let echo_stdout = echo_child
+                .stdout
+                .take()
+                .ok_or_else(|| Status::internal("Failed to open echo stdout"))?;
+            let bw_stdout = bw_child
+                .stdout
+                .take()
+                .ok_or_else(|| Status::internal("Failed to open bw stdout"))?;
+            let hz_stdout = hz_child
+                .stdout
+                .take()
+                .ok_or_else(|| Status::internal("Failed to open hz stdout"))?;
 
             let (tx, rx) = mpsc::channel(64);
 
@@ -88,26 +102,38 @@ impl DataStreamService for MyDataStreamService {
             tokio::spawn(async move {
                 tx_monitor.closed().await;
                 if let Some(p) = echo_pid {
-                    let _ = std::process::Command::new("kill").args(&["-2", &p.to_string()]).status();
+                    let _ = std::process::Command::new("kill")
+                        .args(&["-2", &p.to_string()])
+                        .status();
                 }
                 if let Some(p) = bw_pid {
-                    let _ = std::process::Command::new("kill").args(&["-2", &p.to_string()]).status();
+                    let _ = std::process::Command::new("kill")
+                        .args(&["-2", &p.to_string()])
+                        .status();
                 }
                 if let Some(p) = hz_pid {
-                    let _ = std::process::Command::new("kill").args(&["-2", &p.to_string()]).status();
+                    let _ = std::process::Command::new("kill")
+                        .args(&["-2", &p.to_string()])
+                        .status();
                 }
 
                 // Allow 500ms for graceful cleanup, then force-kill to prevent orphan nodes
                 tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
                 if let Some(p) = echo_pid {
-                    let _ = std::process::Command::new("kill").args(&["-9", &p.to_string()]).status();
+                    let _ = std::process::Command::new("kill")
+                        .args(&["-9", &p.to_string()])
+                        .status();
                 }
                 if let Some(p) = bw_pid {
-                    let _ = std::process::Command::new("kill").args(&["-9", &p.to_string()]).status();
+                    let _ = std::process::Command::new("kill")
+                        .args(&["-9", &p.to_string()])
+                        .status();
                 }
                 if let Some(p) = hz_pid {
-                    let _ = std::process::Command::new("kill").args(&["-9", &p.to_string()]).status();
+                    let _ = std::process::Command::new("kill")
+                        .args(&["-9", &p.to_string()])
+                        .status();
                 }
             });
 
@@ -262,13 +288,19 @@ impl DataStreamService for MyDataStreamService {
 
                 // Hard-terminate all processes on loop break to prevent leaks
                 if let Some(p) = echo_pid {
-                    let _ = std::process::Command::new("kill").args(&["-9", &p.to_string()]).status();
+                    let _ = std::process::Command::new("kill")
+                        .args(&["-9", &p.to_string()])
+                        .status();
                 }
                 if let Some(p) = bw_pid {
-                    let _ = std::process::Command::new("kill").args(&["-9", &p.to_string()]).status();
+                    let _ = std::process::Command::new("kill")
+                        .args(&["-9", &p.to_string()])
+                        .status();
                 }
                 if let Some(p) = hz_pid {
-                    let _ = std::process::Command::new("kill").args(&["-9", &p.to_string()]).status();
+                    let _ = std::process::Command::new("kill")
+                        .args(&["-9", &p.to_string()])
+                        .status();
                 }
             });
 
@@ -282,16 +314,23 @@ impl DataStreamService for MyDataStreamService {
             }
         };
 
-        let mut list_cmd = crate::utils::apt::create_ros2_command(&ws_path, &["topic", "list"]).await;
-        let output = list_cmd.output()
+        let mut list_cmd =
+            crate::utils::apt::create_ros2_command(&ws_path, &["topic", "list"]).await;
+        let output = list_cmd
+            .output()
             .await
             .map_err(|e| Status::internal(format!("Failed to list topics: {e}")))?;
         let stdout_str = String::from_utf8_lossy(&output.stdout);
-        let topics: Vec<&str> = stdout_str.lines().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
+        let topics: Vec<&str> = stdout_str
+            .lines()
+            .map(|l| l.trim())
+            .filter(|l| !l.is_empty())
+            .collect();
 
         let mut image_topics = Vec::new();
         for t in topics {
-            let mut info_cmd = crate::utils::apt::create_ros2_command(&ws_path, &["topic", "info", t]).await;
+            let mut info_cmd =
+                crate::utils::apt::create_ros2_command(&ws_path, &["topic", "info", t]).await;
             let info_out = info_cmd.output().await;
             if let Ok(out) = info_out {
                 let info_str = String::from_utf8_lossy(&out.stdout);
@@ -357,10 +396,21 @@ impl DataStreamService for MyDataStreamService {
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
-            .map_err(|e| Status::internal(format!("Failed to spawn image bridge at {:?}: {}", bridge_path, e)))?;
+            .map_err(|e| {
+                Status::internal(format!(
+                    "Failed to spawn image bridge at {:?}: {}",
+                    bridge_path, e
+                ))
+            })?;
 
-        let mut stdout = child.stdout.take().ok_or_else(|| Status::internal("Failed to open stdout"))?;
-        let stderr = child.stderr.take().ok_or_else(|| Status::internal("Failed to open stderr"))?;
+        let mut stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| Status::internal("Failed to open stdout"))?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| Status::internal("Failed to open stderr"))?;
         let (tx, rx) = mpsc::channel(32);
 
         tokio::spawn(async move {
@@ -405,23 +455,24 @@ impl DataStreamService for MyDataStreamService {
         Ok(Response::new(ReceiverStream::new(rx)))
     }
 
-    async fn publish(
-        &self,
-        req: Request<PublishRequest>,
-    ) -> Result<Response<ApiStatus>, Status> {
+    async fn publish(&self, req: Request<PublishRequest>) -> Result<Response<ApiStatus>, Status> {
         let req = req.into_inner();
         let topic = req.topic.clone();
         let msg_type = req.message_type.clone();
         let mut data_str = String::from_utf8_lossy(&req.data).to_string();
-        
+
         // Clean leading/trailing quotes if they were added in the UI
         data_str = data_str.trim().to_string();
-        if (data_str.starts_with('\'') && data_str.ends_with('\'')) ||
-           (data_str.starts_with('"') && data_str.ends_with('"')) {
-            data_str = data_str[1..data_str.len()-1].trim().to_string();
+        if (data_str.starts_with('\'') && data_str.ends_with('\''))
+            || (data_str.starts_with('"') && data_str.ends_with('"'))
+        {
+            data_str = data_str[1..data_str.len() - 1].trim().to_string();
         }
 
-        println!("[gRPC Backend] Publish Request: topic={}, msg_type={}, data={}", topic, msg_type, data_str);
+        println!(
+            "[gRPC Backend] Publish Request: topic={}, msg_type={}, data={}",
+            topic, msg_type, data_str
+        );
 
         let ws_path = {
             if let Ok(lock) = crate::services::workspace::ACTIVE_WORKSPACE.lock() {
@@ -432,12 +483,20 @@ impl DataStreamService for MyDataStreamService {
         };
 
         tokio::spawn(async move {
-            let mut cmd = crate::utils::apt::create_ros2_command(&ws_path, &[
-                "topic", "pub", 
-                "-1", 
-                "--max-wait-time-secs", "2", 
-                &topic, &msg_type, &data_str
-            ]).await;
+            let mut cmd = crate::utils::apt::create_ros2_command(
+                &ws_path,
+                &[
+                    "topic",
+                    "pub",
+                    "-1",
+                    "--max-wait-time-secs",
+                    "2",
+                    &topic,
+                    &msg_type,
+                    &data_str,
+                ],
+            )
+            .await;
             let _ = cmd.spawn();
         });
 
@@ -486,8 +545,14 @@ impl DataStreamService for MyDataStreamService {
             .spawn()
             .map_err(|e| Status::internal(format!("Failed to run ros2 bag record: {e}")))?;
 
-        let stdout = child.stdout.take().ok_or_else(|| Status::internal("Failed to open stdout"))?;
-        let stderr = child.stderr.take().ok_or_else(|| Status::internal("Failed to open stderr"))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| Status::internal("Failed to open stdout"))?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| Status::internal("Failed to open stderr"))?;
 
         let (tx, rx) = mpsc::channel(64);
         let pid = child.id();
@@ -557,12 +622,19 @@ impl DataStreamService for MyDataStreamService {
                 Err(_) => false,
             };
             let final_event = RecordEvent {
-                ev: Some(rqtll_api::rqtll::api::v1::record_event::Ev::Status(ApiStatus {
-                    ok: success,
-                    code: if success { 0 } else { 2 },
-                    message: if success { "Recording completed successfully" } else { "Recording process stopped" }.to_string(),
-                    details: HashMap::new(),
-                })),
+                ev: Some(rqtll_api::rqtll::api::v1::record_event::Ev::Status(
+                    ApiStatus {
+                        ok: success,
+                        code: if success { 0 } else { 2 },
+                        message: if success {
+                            "Recording completed successfully"
+                        } else {
+                            "Recording process stopped"
+                        }
+                        .to_string(),
+                        details: HashMap::new(),
+                    },
+                )),
             };
             let _ = tx.send(Ok(final_event)).await;
         });
@@ -572,10 +644,7 @@ impl DataStreamService for MyDataStreamService {
 
     type PlayStream = ReceiverStream<Result<PlaybackEvent, Status>>;
 
-    async fn play(
-        &self,
-        req: Request<PlayRequest>,
-    ) -> Result<Response<Self::PlayStream>, Status> {
+    async fn play(&self, req: Request<PlayRequest>) -> Result<Response<Self::PlayStream>, Status> {
         let req = req.into_inner();
         let mut args = vec!["bag".to_string(), "play".to_string(), req.path.clone()];
         if req.rate > 0.0 {
@@ -603,8 +672,14 @@ impl DataStreamService for MyDataStreamService {
             .spawn()
             .map_err(|e| Status::internal(format!("Failed to run ros2 bag play: {e}")))?;
 
-        let stdout = child.stdout.take().ok_or_else(|| Status::internal("Failed to open stdout"))?;
-        let stderr = child.stderr.take().ok_or_else(|| Status::internal("Failed to open stderr"))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| Status::internal("Failed to open stdout"))?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| Status::internal("Failed to open stderr"))?;
 
         let (tx, rx) = mpsc::channel(64);
         let pid = child.id();
@@ -629,13 +704,17 @@ impl DataStreamService for MyDataStreamService {
                 }
                 let chunk = String::from_utf8_lossy(&buf[..n]).to_string();
                 let event = PlaybackEvent {
-                    ev: Some(rqtll_api::rqtll::api::v1::playback_event::Ev::Log(LogEntry {
-                        timestamp: Some(prost_types::Timestamp::from(std::time::SystemTime::now())),
-                        level: LogLevel::Info as i32,
-                        source: "ros2_bag_play".to_string(),
-                        message: chunk,
-                        session_id: "".to_string(),
-                    })),
+                    ev: Some(rqtll_api::rqtll::api::v1::playback_event::Ev::Log(
+                        LogEntry {
+                            timestamp: Some(prost_types::Timestamp::from(
+                                std::time::SystemTime::now(),
+                            )),
+                            level: LogLevel::Info as i32,
+                            source: "ros2_bag_play".to_string(),
+                            message: chunk,
+                            session_id: "".to_string(),
+                        },
+                    )),
                 };
                 if tx_out.send(Ok(event)).await.is_err() {
                     break;
@@ -653,13 +732,17 @@ impl DataStreamService for MyDataStreamService {
                 }
                 let chunk = String::from_utf8_lossy(&buf[..n]).to_string();
                 let event = PlaybackEvent {
-                    ev: Some(rqtll_api::rqtll::api::v1::playback_event::Ev::Log(LogEntry {
-                        timestamp: Some(prost_types::Timestamp::from(std::time::SystemTime::now())),
-                        level: LogLevel::Warn as i32,
-                        source: "ros2_bag_play".to_string(),
-                        message: chunk,
-                        session_id: "".to_string(),
-                    })),
+                    ev: Some(rqtll_api::rqtll::api::v1::playback_event::Ev::Log(
+                        LogEntry {
+                            timestamp: Some(prost_types::Timestamp::from(
+                                std::time::SystemTime::now(),
+                            )),
+                            level: LogLevel::Warn as i32,
+                            source: "ros2_bag_play".to_string(),
+                            message: chunk,
+                            session_id: "".to_string(),
+                        },
+                    )),
                 };
                 if tx_err.send(Ok(event)).await.is_err() {
                     break;
@@ -674,12 +757,19 @@ impl DataStreamService for MyDataStreamService {
                 Err(_) => false,
             };
             let final_event = PlaybackEvent {
-                ev: Some(rqtll_api::rqtll::api::v1::playback_event::Ev::Status(ApiStatus {
-                    ok: success,
-                    code: if success { 0 } else { 2 },
-                    message: if success { "Playback completed successfully" } else { "Playback process stopped" }.to_string(),
-                    details: HashMap::new(),
-                })),
+                ev: Some(rqtll_api::rqtll::api::v1::playback_event::Ev::Status(
+                    ApiStatus {
+                        ok: success,
+                        code: if success { 0 } else { 2 },
+                        message: if success {
+                            "Playback completed successfully"
+                        } else {
+                            "Playback process stopped"
+                        }
+                        .to_string(),
+                        details: HashMap::new(),
+                    },
+                )),
             };
             let _ = tx.send(Ok(final_event)).await;
         });
